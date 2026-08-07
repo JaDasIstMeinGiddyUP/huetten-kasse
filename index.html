@@ -82,6 +82,41 @@
   .btn-product .emoji{ font-size:28px; margin-bottom:7px; }
   .btn-product .pname{ font-size:13px; font-weight:600; text-align:center; line-height:1.25; }
   .btn-product .price-tag{ font-size:12.5px; font-weight:700; margin-top:6px; }
+
+  /* ============ MOBILE LAYOUT ============ */
+  .mobile-cart-toggle{ display:none; }
+  @media (max-width:760px){
+    .shop-body{ flex-direction:column; position:relative; }
+    .grid-container{ flex:1; grid-template-columns:repeat(2, 1fr); padding:12px; padding-bottom:96px; gap:10px; }
+    .btn-product{ min-height:100px; padding:12px 8px; }
+    .btn-product .emoji{ font-size:24px; margin-bottom:4px; }
+    .btn-product .pname{ font-size:12px; }
+    .btn-product .price-tag{ font-size:11.5px; margin-top:4px; }
+
+    .sidebar{
+      position:fixed; left:0; right:0; bottom:0; max-width:none; min-width:0;
+      border-left:none; border-top:1px solid var(--line);
+      border-radius:20px 20px 0 0; box-shadow:0 -8px 24px rgba(0,0,0,0.1);
+      max-height:78vh; padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+      transition:transform .25s ease; transform:translateY(calc(100% - 74px)); z-index:40;
+    }
+    .sidebar.expanded{ transform:translateY(0); }
+    .sidebar h3{ display:none; }
+    .tally-section{ display:none; }
+
+    .mobile-cart-toggle{
+      display:flex; align-items:center; justify-content:space-between; cursor:pointer;
+      padding:8px 2px 14px 2px; margin:-4px -2px 8px -2px; border-bottom:1px solid var(--line);
+    }
+    .mobile-cart-toggle .handle{ width:38px; height:4px; border-radius:3px; background:#ddd6c9; position:absolute; left:50%; top:6px; transform:translateX(-50%); }
+    .mobile-cart-toggle .mct-left{ display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; }
+    .mobile-cart-toggle .mct-count{ background:var(--rose-bg); color:var(--rose-ac); font-size:12px; font-weight:800; padding:2px 8px; border-radius:10px; }
+    .mobile-cart-toggle .mct-total{ font-weight:800; font-size:16px; color:var(--green-ok); }
+    .mobile-cart-toggle .chevron{ font-size:12px; color:var(--sub); margin-left:6px; }
+
+    .cart-list{ max-height:26vh; }
+    .total-box{ font-size:20px; }
+  }
   .swatch-amber{ background:var(--amber-bg); } .swatch-amber .price-tag{ color:var(--amber-ac);}
   .swatch-rose{  background:var(--rose-bg);  } .swatch-rose .price-tag{ color:var(--rose-ac);}
   .swatch-peach{ background:var(--peach-bg); } .swatch-peach .price-tag{ color:var(--peach-ac);}
@@ -190,7 +225,15 @@
 
     <div class="shop-body">
       <div class="grid-container" id="grid"></div>
-      <div class="sidebar">
+      <div class="sidebar" id="sidebar">
+        <div class="mobile-cart-toggle" onclick="toggleMobileCart()">
+          <div class="handle"></div>
+          <div class="mct-left">🧾 Bon <span class="mct-count" id="mctCount">0</span></div>
+          <div style="display:flex; align-items:center;">
+            <span class="mct-total" id="mctTotal">0,00 €</span>
+            <span class="chevron" id="mctChevron">▲</span>
+          </div>
+        </div>
         <h3>Aktueller Bon</h3>
         <div class="cart-list" id="cart"></div>
         <div class="total-box">Summe: <span id="total">0,00 €</span></div>
@@ -233,7 +276,7 @@
   // ==================================================================
   // ⚠️ HIER DIE WEB-APP-URL DES GOOGLE APPS SCRIPTS EINTRAGEN
   // ==================================================================
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbzhuce4BYNVuc2h9WTSw5lkNb3NTczxvRXBVYmN-0r2xmptMA_9wPzBuNDzjO_5NUHG/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbwjmRGePydGKUHkz20sRYee3llFlfisoIygJx0ugsNwABzr9suF8hknNg093plvAr8/exec";
 
   // ==================================================================
   // PRODUKTDATEN (Grundkarte – fest, nicht löschbar)
@@ -340,6 +383,11 @@
   // ==================================================================
   // NAVIGATION
   // ==================================================================
+  function toggleMobileCart(){
+    const sb = document.getElementById('sidebar');
+    sb.classList.toggle('expanded');
+    document.getElementById('mctChevron').textContent = sb.classList.contains('expanded') ? '▼' : '▲';
+  }
   function openShop(hut){ currentHut = hut; currentSub = null; document.getElementById('home').classList.remove('active'); document.getElementById('shop').classList.add('active'); renderShop(); }
   function goHome(){ document.getElementById('shop').classList.remove('active'); document.getElementById('home').classList.add('active'); }
   function goBack(){ if(currentSub){ currentSub = null; renderShop(); } else { goHome(); } }
@@ -479,8 +527,24 @@
     document.getElementById('total').innerText = totalSum.toFixed(2).replace('.', ',') + ' €';
     renderCashQuickButtons(); updateChangeDisplay();
     document.getElementById('checkoutBtn').disabled = (totalSum === 0);
+
+    const totalCount = items.reduce((s,i) => s + cart[i].count, 0);
+    document.getElementById('mctCount').textContent = totalCount;
+    document.getElementById('mctTotal').textContent = totalSum.toFixed(2).replace('.', ',') + ' €';
+    // Bon automatisch aufklappen, sobald etwas drin ist – auf dem Handy sonst leicht zu übersehen
+    const sb = document.getElementById('sidebar');
+    if(totalCount > 0 && window.innerWidth <= 760 && !sb.classList.contains('expanded')){
+      sb.classList.add('expanded');
+      document.getElementById('mctChevron').textContent = '▼';
+    }
   }
-  function clearCart(){ cart = {}; cashGiven = null; document.getElementById('cashInput').value = ''; renderCart(); }
+  function clearCart(){
+    cart = {}; cashGiven = null; document.getElementById('cashInput').value = '';
+    const sb = document.getElementById('sidebar');
+    sb.classList.remove('expanded');
+    document.getElementById('mctChevron').textContent = '▲';
+    renderCart();
+  }
 
   function renderCashQuickButtons(){
     const box = document.getElementById('cashQuick'); box.innerHTML = '';
