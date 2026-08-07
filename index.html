@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Concept Glücklich – Hütten-Kasse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff; --ink:#2b2620; --sub:#8a8378; --line:#eee9e1;
+    --amber-bg:#fdedd3; --amber-ac:#b3670e;
+    --rose-bg:#fbe4ec;  --rose-ac:#b1276b;
+    --peach-bg:#ffe3d6; --peach-ac:#c2410c;
+    --sky-bg:#dbeafe;   --sky-ac:#1d4ed8;
+    --mint-bg:#d7f5e6;  --mint-ac:#0a7a51;
+    --green-ok:#1fa971; --red-clear:#e0554a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; user-select:none;}
+  body{ font-family:'Poppins',sans-serif; background:var(--bg); color:var(--ink); height:100vh; overflow:hidden; }
+  .screen{ height:100vh; width:100vw; display:none; }
+  .screen.active{ display:flex; }
+  .brandmark{ display:flex; align-items:center; gap:8px; color:var(--sub); }
+  .brandmark svg{ width:24px; height:24px; }
+  .brand-title{ font-size:12px; letter-spacing:.14em; font-weight:600; text-transform:uppercase; }
+
+  .loading-overlay, .fatal-overlay{ position:fixed; inset:0; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; z-index:999; text-align:center; padding:30px; }
+  .spinner{ width:44px; height:44px; border-radius:50%; border:4px solid #eee9e1; border-top-color:var(--rose-ac); animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  .fatal-overlay{ display:none; }
+  .fatal-overlay h2{ color:var(--red-clear); font-size:22px; margin-bottom:8px; }
+  .fatal-overlay p{ color:var(--sub); font-size:14px; max-width:360px; line-height:1.5; }
+  .fatal-overlay code{ background:#f4f1ec; padding:2px 6px; border-radius:6px; font-size:12.5px; }
+
+  #home{ flex-direction:column; align-items:center; justify-content:center; width:100%; gap:36px; padding:24px;
+    background:radial-gradient(circle at 12% 10%, #fdf2e3 0%, rgba(253,242,227,0) 40%),
+               radial-gradient(circle at 90% 88%, #fbe4ec55 0%, rgba(251,228,236,0) 45%), var(--bg); }
+  .home-header{ text-align:center; }
+  .home-header .brandmark{ justify-content:center; margin-bottom:10px; }
+  .home-header h1{ font-family:'Dancing Script',cursive; font-weight:700; font-size:54px; line-height:1; }
+  .home-header p{ color:var(--sub); font-size:14px; margin-top:8px; }
+  .hut-grid{ display:flex; gap:26px; flex-wrap:wrap; justify-content:center; }
+  .hut-card{ width:290px; min-height:320px; border-radius:28px; padding:32px 24px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; cursor:pointer; border:1px solid rgba(0,0,0,0.04);
+    box-shadow:0 10px 30px rgba(40,30,15,0.08); }
+  .hut-card:active{ transform:scale(0.97); }
+  .hut-card.bier{ background:linear-gradient(160deg, var(--amber-bg), #fff8ec); }
+  .hut-card.wein{ background:linear-gradient(160deg, var(--rose-bg), #fff5f8); }
+  .hut-icon{ width:100px; height:100px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:48px; margin-bottom:20px; background:rgba(255,255,255,0.65); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.9); }
+  .hut-card h2{ font-family:'Dancing Script',cursive; font-weight:700; font-size:36px; margin-bottom:8px; }
+  .hut-card.bier h2{ color:var(--amber-ac); }
+  .hut-card.wein h2{ color:var(--rose-ac); }
+  .hut-card p{ font-size:13px; color:var(--sub); line-height:1.5; }
+  .tap-hint{ margin-top:20px; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:rgba(0,0,0,0.3); }
+
+  #shop{ width:100%; flex-direction:column; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid var(--line); background:#fff; gap:10px; flex-wrap:wrap; }
+  .topbar-left{ display:flex; align-items:center; gap:14px; }
+  .back-btn{ width:40px; height:40px; border-radius:13px; border:none; background:#f4f1ec; color:var(--ink); font-size:19px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
+  .back-btn:active{ background:#e8e3da; }
+  .shop-title{ font-family:'Dancing Script',cursive; font-weight:700; font-size:27px; }
+  #shop.mode-bier .shop-title{ color:var(--amber-ac); }
+  #shop.mode-wein .shop-title{ color:var(--rose-ac); }
+  .topbar-right{ display:flex; align-items:center; gap:10px; }
+  .hut-switch{ display:flex; gap:6px; background:#f6f4f0; padding:5px; border-radius:14px; }
+  .hut-switch button{ border:none; background:transparent; padding:8px 14px; border-radius:10px; font-weight:600; font-size:12px; cursor:pointer; color:var(--sub); font-family:'Poppins',sans-serif; }
+  .hut-switch button.on.bier{ background:var(--amber-bg); color:var(--amber-ac); }
+  .hut-switch button.on.wein{ background:var(--rose-bg); color:var(--rose-ac); }
+  .sync-badge{ font-size:11px; font-weight:700; padding:6px 11px; border-radius:20px; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .sync-badge .dot{ width:7px; height:7px; border-radius:50%; }
+  .sync-badge.ok{ background:#e6f7ef; color:#0a7a51; } .sync-badge.ok .dot{ background:#0a7a51; }
+  .sync-badge.syncing{ background:#fff6e0; color:#a9720c; } .sync-badge.syncing .dot{ background:#a9720c; }
+  .sync-badge.offline{ background:#fdeceb; color:#c0392b; } .sync-badge.offline .dot{ background:#c0392b; }
+  .banner-fail{ background:#fdeceb; color:#8f2b22; padding:10px 16px; font-size:12.5px; font-weight:600; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .banner-fail button{ background:#c0392b; color:#fff; border:none; padding:7px 14px; border-radius:8px; font-weight:700; cursor:pointer; font-size:11.5px; flex-shrink:0; }
+
+  .shop-body{ flex:1; display:flex; overflow:hidden; }
+  .grid-container{ flex:2; padding:18px; display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; overflow-y:auto; align-content:start; }
+  .btn-product{ border-radius:20px; padding:18px 10px; min-height:124px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; border:1px solid rgba(0,0,0,0.04); box-shadow:0 6px 16px rgba(40,30,15,0.06); position:relative; }
+  .btn-product:active{ transform:scale(0.95); }
+  .btn-product .emoji{ font-size:28px; margin-bottom:7px; }
+  .btn-product .pname{ font-size:13px; font-weight:600; text-align:center; line-height:1.25; }
+  .btn-product .price-tag{ font-size:12.5px; font-weight:700; margin-top:6px; }
+  .swatch-amber{ background:var(--amber-bg); } .swatch-amber .price-tag{ color:var(--amber-ac);}
+  .swatch-rose{  background:var(--rose-bg);  } .swatch-rose .price-tag{ color:var(--rose-ac);}
+  .swatch-peach{ background:var(--peach-bg); } .swatch-peach .price-tag{ color:var(--peach-ac);}
+  .swatch-sky{   background:var(--sky-bg);   } .swatch-sky .price-tag{ color:var(--sky-ac);}
+  .swatch-mint{  background:var(--mint-bg);  } .swatch-mint .price-tag{ color:var(--mint-ac);}
+  .bottle-tile{ border:2px dashed var(--rose-ac); }
+  .bottle-tile .price-tag{ color:var(--rose-ac); font-weight:600; }
+  .add-tile{ border:2px dashed #c9c2b3; background:#faf9f6; color:#8a8378; }
+  .add-tile .pname{ color:#8a8378; }
+  .custom-tile .del-btn{ position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,0.85); border:none; font-size:13px; font-weight:800; color:#c0392b; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+
+  .sidebar{ flex:1; min-width:300px; max-width:360px; background:#fafaf8; border-left:1px solid var(--line); display:flex; flex-direction:column; padding:16px; overflow-y:auto; }
+  .sidebar h3{ font-size:13px; font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.06em; margin-bottom:9px; }
+  .cart-list{ flex-shrink:0; overflow-y:auto; border-bottom:1px solid var(--line); margin-bottom:10px; max-height:20vh; }
+  .cart-item{ display:flex; justify-content:space-between; align-items:center; font-size:13.5px; font-weight:500; margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed var(--line); gap:6px; }
+  .cart-item .qty-controls{ display:flex; align-items:center; gap:7px; flex-shrink:0; }
+  .qty-controls button{ width:23px; height:23px; border-radius:8px; border:none; background:#eee9e1; cursor:pointer; font-weight:700; }
+  .empty-cart{ color:#c3bcae; font-size:13px; padding:16px 0; text-align:center; }
+  .total-box{ font-size:24px; font-weight:800; margin-bottom:10px; text-align:right; }
+  .total-box span{ color:var(--green-ok); }
+  .cash-box{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  .cash-box label{ font-size:11px; font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:6px; }
+  .cash-row input{ width:100%; font-size:19px; font-weight:700; padding:10px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Poppins',sans-serif; }
+  .cash-quick{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  .cash-quick button{ flex:1; min-width:50px; padding:8px; border:none; border-radius:8px; background:#f4f1ec; font-weight:700; font-size:12px; cursor:pointer; }
+  .change-display{ margin-top:10px; font-size:15px; font-weight:800; text-align:right; min-height:19px; }
+  .change-display.ok{ color:var(--green-ok); }
+  .change-display.bad{ color:var(--red-clear); }
+  .change-display.neutral{ color:#c3bcae; font-weight:600; font-size:12.5px; }
+  .action-btn{ padding:14px; border:none; border-radius:14px; font-size:15px; font-weight:700; cursor:pointer; margin-bottom:8px; font-family:'Poppins',sans-serif; }
+  .btn-checkout{ background:var(--green-ok); color:#fff; }
+  .btn-checkout:disabled{ background:#bcbcbc; cursor:default; }
+  .btn-clear{ background:#fdeceb; color:var(--red-clear); }
+  .tally-section{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:13px; margin-top:10px; flex-shrink:0; display:flex; flex-direction:column; }
+  .tally-title{ font-size:12.5px; font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+  .tally-list{ max-height:22vh; overflow-y:auto; font-size:12.5px; }
+  .tally-item{ display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--line); }
+  .tally-item span:last-child{ font-weight:700; }
+  #dayTotal{ font-weight:800; color:var(--green-ok); margin-top:8px; font-size:13.5px; }
+  .toast-success{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1fa971; color:#fff; padding:12px 22px; border-radius:14px; font-weight:600; font-size:14px; box-shadow:0 8px 20px rgba(0,0,0,0.18); z-index:80; opacity:0; pointer-events:none; transition:opacity .25s ease; }
+  .toast-success.show{ opacity:1; }
+  .modal-overlay{ position:fixed; inset:0; background:rgba(20,15,10,0.45); display:none; align-items:center; justify-content:center; z-index:90; padding:20px; }
+  .modal-overlay.show{ display:flex; }
+  .modal-box{ background:#fff; border-radius:20px; padding:24px; width:100%; max-width:300px; box-shadow:0 20px 50px rgba(0,0,0,0.2); }
+  .modal-box h3{ font-family:'Dancing Script',cursive; font-size:26px; color:var(--rose-ac); margin-bottom:12px; }
+  .modal-box label{ font-size:11.5px; font-weight:700; color:var(--sub); display:block; margin:10px 0 4px; text-transform:uppercase; letter-spacing:.04em; }
+  .modal-box input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Poppins',sans-serif; font-size:15px; }
+  .modal-actions{ display:flex; gap:10px; margin-top:18px; }
+  .modal-actions button{ flex:1; padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-family:'Poppins',sans-serif; }
+  .modal-cancel{ background:#f4f1ec; color:var(--sub); }
+  .modal-save{ background:var(--rose-ac); color:#fff; }
+</style>
+</head>
+<body>
+
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div style="color:var(--sub); font-size:14px; font-weight:600;">Synchronisiere mit Google Sheets …</div>
+  </div>
+
+  <div class="fatal-overlay" id="fatalOverlay">
+    <h2>⚠️ Noch nicht eingerichtet</h2>
+    <p>Im Code fehlt noch die Web-App-URL des Google Apps Scripts. Trag sie in der Zeile <code>const GAS_URL = "..."</code> ganz oben im Script ein und lade die Seite neu.</p>
+  </div>
+
+  <div id="home" class="screen active">
+    <div class="home-header">
+      <div class="brandmark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 15 A8 8 0 0 1 20 15" stroke="#c9a24a" stroke-width="1.6" stroke-linecap="round"/><path d="M12 15 V9" stroke="#c9a24a" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span class="brand-title">Concept Glücklich</span>
+      </div>
+      <h1>Hütten-Kasse ♡</h1>
+      <p>Wähle eine Hütte, um mit dem Verkauf zu starten</p>
+    </div>
+    <div class="hut-grid">
+      <div class="hut-card bier" onclick="openShop('bier')">
+        <div class="hut-icon">🍺</div>
+        <h2>Bier-Hütte</h2>
+        <p>Fassbier, Flaschenbier &amp; Softdrinks</p>
+        <div class="tap-hint">Antippen zum Öffnen</div>
+      </div>
+      <div class="hut-card wein" onclick="openShop('wein')">
+        <div class="hut-icon">🍷</div>
+        <h2>Wein-Hütte</h2>
+        <p>Wein, Spritz &amp; erfrischende Getränke</p>
+        <div class="tap-hint">Antippen zum Öffnen</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="shop" class="screen">
+    <div id="failBanner"></div>
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="back-btn" onclick="goBack()">⌂</button>
+        <div class="shop-title" id="shopTitle">Bier-Hütte</div>
+      </div>
+      <div class="topbar-right">
+        <div class="sync-badge ok" id="syncBadge"><span class="dot"></span><span id="syncText">Verbunden</span></div>
+        <div class="hut-switch">
+          <button id="switchBier" class="bier" onclick="switchHut('bier')">🍺 Bier</button>
+          <button id="switchWein" class="wein" onclick="switchHut('wein')">🍷 Wein</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="shop-body">
+      <div class="grid-container" id="grid"></div>
+      <div class="sidebar">
+        <h3>Aktueller Bon</h3>
+        <div class="cart-list" id="cart"></div>
+        <div class="total-box">Summe: <span id="total">0,00 €</span></div>
+        <div class="cash-box">
+          <label>Betrag erhalten</label>
+          <div class="cash-row"><input type="number" inputmode="decimal" id="cashInput" placeholder="0,00" oninput="onCashInput(this.value)"></div>
+          <div class="cash-quick" id="cashQuick"></div>
+          <div class="change-display neutral" id="changeDisplay"></div>
+        </div>
+        <button class="action-btn btn-checkout" id="checkoutBtn" onclick="checkout()">KASSIEREN / BUCHEN</button>
+        <button class="action-btn btn-clear" onclick="clearCart()">Bon leeren</button>
+        <div class="tally-section">
+          <div class="tally-title">📊 Tages-Strichliste (alle Geräte)</div>
+          <div class="tally-list" id="tallyList"></div>
+          <div id="dayTotal">Gesamtumsatz: 0,00 €</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-success" id="toastSuccess">✅ Buchung gespeichert</div>
+
+  <div class="modal-overlay" id="addProductModal">
+    <div class="modal-box">
+      <h3 id="modalTitle">Getränk hinzufügen</h3>
+      <label>Name</label>
+      <input type="text" id="newProdName" placeholder="z. B. Chardonnay">
+      <label>Preis (€)</label>
+      <input type="number" inputmode="decimal" id="newProdPrice" placeholder="z. B. 27">
+      <label>Icon (Emoji, optional)</label>
+      <input type="text" id="newProdEmoji" placeholder="🍷" maxlength="4">
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeAddProductModal()">Abbrechen</button>
+        <button class="modal-save" onclick="saveNewProduct()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ==================================================================
+  // ⚠️ HIER DIE WEB-APP-URL DES GOOGLE APPS SCRIPTS EINTRAGEN
+  // ==================================================================
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbzhuce4BYNVuc2h9WTSw5lkNb3NTczxvRXBVYmN-0r2xmptMA_9wPzBuNDzjO_5NUHG/exec";
+
+  // ==================================================================
+  // PRODUKTDATEN (Grundkarte – fest, nicht löschbar)
+  // ==================================================================
+  const PRODUCTS = {
+    bier: [
+      { name:'Augustiner Hell 0,5l', price:6.00,  emoji:'🍺', swatch:'amber' },
+      { name:'Augustiner Hell 1,0l', price:12.00, emoji:'🍺', swatch:'amber' },
+      { name:'Augustiner Weizen',    price:6.00,  emoji:'🍺', swatch:'amber' },
+      { name:'Weizen 0,0',           price:5.90,  emoji:'🍺', swatch:'amber' },
+      { name:'Schumacher Alt',       price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Naturradler',          price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Naturradler 0,0',      price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Coca Cola',            price:4.00,  emoji:'🥤', swatch:'sky'   },
+      { name:'Coca Cola Zero',       price:4.00,  emoji:'🥤', swatch:'sky'   },
+      { name:'Wasser',               price:3.90,  emoji:'💧', swatch:'mint'  },
+    ],
+    wein: [
+      { name:'Glücklich Spritz',     price:8.90,  emoji:'🍹', swatch:'peach' },
+      { name:'Aperol Spritz',        price:8.90,  emoji:'🍹', swatch:'peach' },
+      { name:'Estrella 0,33L',       price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Wasser 0,75L',         price:6.90,  emoji:'💧', swatch:'mint'  },
+      { name:'Wasser 0,33L',         price:3.90,  emoji:'💧', swatch:'mint'  },
+    ]
+  };
+  const BOTTLES = {
+    wein: [
+      { name:'Grauburgunder',         price:25.00, emoji:'🍷', swatch:'rose' },
+      { name:'Rosé (Feinherb)',       price:25.00, emoji:'🍷', swatch:'rose' },
+      { name:'Seelenblick (trocken)', price:29.00, emoji:'🍇', swatch:'rose' },
+      { name:'Seelenblick Magnum',    price:58.00, emoji:'🍾', swatch:'rose' },
+    ]
+  };
+  // Kategorien, in denen man per "+" selbst Getränke ergänzen kann
+  const CATEGORY_META = {
+    'bier':          { swatch:'amber', defaultEmoji:'🍺', label:'Bier-Hütte' },
+    'wein':          { swatch:'peach', defaultEmoji:'🥤', label:'Wein-Hütte' },
+    'wein-flaschen': { swatch:'rose',  defaultEmoji:'🍷', label:'Weinkarte (Flasche)' },
+  };
+
+  // ==================================================================
+  // STATE
+  // ==================================================================
+  let currentHut = 'bier';
+  let currentSub = null;
+  let cart = {};
+  let totalSum = 0;
+  let cashGiven = null;
+  let currentAddCategory = null;
+
+  let knownSales = {};          // id -> sale
+  let customProducts = { bier:{}, wein:{}, 'wein-flaschen':{} }; // category -> id -> {name, price}
+  let pendingFailedSales = [];
+  let dayTally = {};
+  let daySum = 0;
+  let syncTimer = null;
+
+  const RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000];
+
+  // ==================================================================
+  // BACKEND-KOMMUNIKATION (Google Apps Script)
+  // ==================================================================
+  async function gasGet(action){
+    const res = await fetch(GAS_URL + '?action=' + action, { method:'GET' });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  }
+  async function gasPost(payload){
+    // Content-Type text/plain vermeidet einen CORS-Preflight, den Apps Script nicht beantwortet
+    const res = await fetch(GAS_URL, {
+      method:'POST',
+      headers: { 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(data && data.error) throw new Error(data.error);
+    return data;
+  }
+
+  // ==================================================================
+  // INIT
+  // ==================================================================
+  async function init(){
+    if(!GAS_URL || GAS_URL.indexOf('PASTE_YOUR') === 0){
+      document.getElementById('loadingOverlay').style.display = 'none';
+      document.getElementById('fatalOverlay').style.display = 'flex';
+      return;
+    }
+    try{ await Promise.all([pollTally(), loadCustomProducts()]); }
+    catch(e){ /* Erst-Sync kann fehlschlagen, Polling versucht es weiter */ }
+    document.getElementById('loadingOverlay').style.display = 'none';
+    renderCart();
+    syncTimer = setInterval(() => { pollTally(); loadCustomProducts(); }, 8000);
+  }
+
+  function setSyncBadge(state){
+    const badge = document.getElementById('syncBadge');
+    if(!badge) return;
+    badge.className = 'sync-badge ' + state;
+    document.getElementById('syncText').textContent = state === 'ok' ? 'Verbunden' : state === 'syncing' ? 'Synchronisiere…' : 'Kein Empfang';
+  }
+
+  // ==================================================================
+  // NAVIGATION
+  // ==================================================================
+  function openShop(hut){ currentHut = hut; currentSub = null; document.getElementById('home').classList.remove('active'); document.getElementById('shop').classList.add('active'); renderShop(); }
+  function goHome(){ document.getElementById('shop').classList.remove('active'); document.getElementById('home').classList.add('active'); }
+  function goBack(){ if(currentSub){ currentSub = null; renderShop(); } else { goHome(); } }
+  function switchHut(hut){ currentHut = hut; currentSub = null; renderShop(); }
+  function openBottleMenu(){ currentSub = 'flaschen'; renderShop(); }
+
+  function renderShop(){
+    const shopEl = document.getElementById('shop');
+    shopEl.classList.remove('mode-bier','mode-wein');
+    shopEl.classList.add('mode-' + currentHut);
+    document.getElementById('switchBier').classList.toggle('on', currentHut === 'bier');
+    document.getElementById('switchWein').classList.toggle('on', currentHut === 'wein');
+
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    if(currentSub === 'flaschen'){
+      document.getElementById('shopTitle').innerHTML = 'Wein-Hütte <span style="font-size:15px; color:var(--sub); font-family:Poppins,sans-serif; font-weight:600;">› Weinkarte (Flasche)</span>';
+      BOTTLES.wein.forEach(p => grid.appendChild(makeTile(p)));
+      renderCustomTiles(grid, 'wein-flaschen');
+      grid.appendChild(makeAddTile('wein-flaschen'));
+      return;
+    }
+
+    document.getElementById('shopTitle').innerText = CATEGORY_META[currentHut].label;
+    PRODUCTS[currentHut].forEach(p => grid.appendChild(makeTile(p)));
+    renderCustomTiles(grid, currentHut);
+
+    if(currentHut === 'wein'){
+      const tile = document.createElement('div');
+      tile.className = 'btn-product swatch-rose bottle-tile';
+      tile.onclick = openBottleMenu;
+      tile.innerHTML = `<div class="emoji">🍾</div><div class="pname">Weinkarte<br>(Flasche)</div><div class="price-tag">→ ansehen</div>`;
+      grid.appendChild(tile);
+    }
+    grid.appendChild(makeAddTile(currentHut));
+  }
+
+  function renderCustomTiles(grid, category){
+    Object.keys(customProducts[category]).forEach(id => {
+      const p = customProducts[category][id];
+      grid.appendChild(makeTile({ name:p.name, price:p.price, emoji:p.emoji || CATEGORY_META[category].defaultEmoji, swatch:CATEGORY_META[category].swatch }, id, true));
+    });
+  }
+
+  function makeTile(p, customId, isCustom){
+    const tile = document.createElement('div');
+    tile.className = 'btn-product swatch-' + p.swatch + (isCustom ? ' custom-tile' : '');
+    tile.onclick = () => addItem(p.name, p.price);
+    tile.innerHTML = `
+      <div class="emoji">${p.emoji || '🍷'}</div>
+      <div class="pname">${p.name}</div>
+      <div class="price-tag">${p.price.toFixed(2).replace('.', ',')} €</div>
+      ${isCustom ? '<button class="del-btn" onclick="event.stopPropagation(); removeCustomProduct(\''+customId+'\')">×</button>' : ''}
+    `;
+    return tile;
+  }
+  function makeAddTile(category){
+    const tile = document.createElement('div');
+    tile.className = 'btn-product add-tile';
+    tile.onclick = () => openAddProductModal(category);
+    tile.innerHTML = `<div class="emoji">➕</div><div class="pname">Getränk<br>hinzufügen</div>`;
+    return tile;
+  }
+
+  // ==================================================================
+  // EIGENE GETRÄNKE HINZUFÜGEN (auf jeder Seite, geräteübergreifend)
+  // ==================================================================
+  function openAddProductModal(category){
+    currentAddCategory = category;
+    document.getElementById('modalTitle').innerText = 'Zu "' + CATEGORY_META[category].label + '" hinzufügen';
+    document.getElementById('newProdName').value = '';
+    document.getElementById('newProdPrice').value = '';
+    document.getElementById('newProdEmoji').value = CATEGORY_META[category].defaultEmoji;
+    document.getElementById('addProductModal').classList.add('show');
+  }
+  function closeAddProductModal(){ document.getElementById('addProductModal').classList.remove('show'); }
+
+  async function saveNewProduct(){
+    const name = document.getElementById('newProdName').value.trim();
+    const price = parseFloat(document.getElementById('newProdPrice').value.replace(',', '.'));
+    const emoji = document.getElementById('newProdEmoji').value.trim() || CATEGORY_META[currentAddCategory].defaultEmoji;
+    if(!name || isNaN(price) || price <= 0){ alert('Bitte einen Namen und einen gültigen Preis eingeben.'); return; }
+    try{
+      const res = await gasPost({ type:'product', category: currentAddCategory, name, price, emoji });
+      customProducts[currentAddCategory][res.id] = { name, price, emoji };
+      closeAddProductModal();
+      renderShop();
+    }catch(e){ alert('Konnte nicht gespeichert werden – bitte Verbindung prüfen und nochmal versuchen.'); }
+  }
+
+  async function removeCustomProduct(id){
+    if(!confirm('Dieses Getränk wirklich aus der Karte entfernen?')) return;
+    try{
+      await gasPost({ type:'delete_product', id });
+      Object.keys(customProducts).forEach(cat => { delete customProducts[cat][id]; });
+      renderShop();
+    }catch(e){ alert('Löschen fehlgeschlagen – bitte nochmal versuchen.'); }
+  }
+
+  async function loadCustomProducts(){
+    try{
+      setSyncBadge('syncing');
+      const rows = await gasGet('products');
+      const fresh = { bier:{}, wein:{}, 'wein-flaschen':{} };
+      rows.forEach(r => { if(fresh[r.category]){ fresh[r.category][r.id] = { name:r.name, price:parseFloat(r.price), emoji:r.emoji }; } });
+      customProducts = fresh;
+      setSyncBadge('ok');
+      renderShop();
+    }catch(e){ setSyncBadge('offline'); }
+  }
+
+  // ==================================================================
+  // WARENKORB
+  // ==================================================================
+  function addItem(name, price){ if(cart[name]){ cart[name].count++; } else { cart[name] = { price, count:1 }; } renderCart(); }
+  function changeQty(name, delta){ if(!cart[name]) return; cart[name].count += delta; if(cart[name].count <= 0) delete cart[name]; renderCart(); }
+  function renderCart(){
+    const cartDiv = document.getElementById('cart');
+    cartDiv.innerHTML = ''; totalSum = 0;
+    const items = Object.keys(cart);
+    if(items.length === 0){ cartDiv.innerHTML = '<div class="empty-cart">Noch nichts im Bon.</div>'; }
+    items.forEach(item => {
+      const itemTotal = cart[item].price * cart[item].count;
+      totalSum += itemTotal;
+      cartDiv.innerHTML += `
+        <div class="cart-item">
+          <span>${item}</span>
+          <div class="qty-controls">
+            <button onclick="changeQty('${item}', -1)">−</button>
+            <span>${cart[item].count}</span>
+            <button onclick="changeQty('${item}', 1)">+</button>
+            <span style="margin-left:4px;">${itemTotal.toFixed(2).replace('.', ',')} €</span>
+          </div>
+        </div>`;
+    });
+    document.getElementById('total').innerText = totalSum.toFixed(2).replace('.', ',') + ' €';
+    renderCashQuickButtons(); updateChangeDisplay();
+    document.getElementById('checkoutBtn').disabled = (totalSum === 0);
+  }
+  function clearCart(){ cart = {}; cashGiven = null; document.getElementById('cashInput').value = ''; renderCart(); }
+
+  function renderCashQuickButtons(){
+    const box = document.getElementById('cashQuick'); box.innerHTML = '';
+    if(totalSum === 0) return;
+    const amounts = new Set(); amounts.add(Math.ceil(totalSum));
+    [5,10,20,50].forEach(d => amounts.add(Math.ceil(totalSum / d) * d));
+    Array.from(amounts).filter(v => v > 0).sort((a,b)=>a-b).slice(0,4).forEach(v => {
+      const btn = document.createElement('button');
+      btn.textContent = v.toFixed(0) + ' €';
+      btn.onclick = () => { cashGiven = v; document.getElementById('cashInput').value = v; updateChangeDisplay(); };
+      box.appendChild(btn);
+    });
+  }
+  function onCashInput(val){ cashGiven = val === '' ? null : parseFloat(val.replace(',', '.')); updateChangeDisplay(); }
+  function updateChangeDisplay(){
+    const el = document.getElementById('changeDisplay');
+    if(totalSum === 0){ el.textContent = ''; el.className = 'change-display neutral'; return; }
+    if(cashGiven === null || isNaN(cashGiven)){ el.textContent = 'Betrag erhalten eingeben'; el.className = 'change-display neutral'; return; }
+    const diff = cashGiven - totalSum;
+    if(diff < 0){ el.textContent = 'Fehlt noch: ' + Math.abs(diff).toFixed(2).replace('.', ',') + ' €'; el.className = 'change-display bad'; }
+    else{ el.textContent = 'Rückgeld: ' + diff.toFixed(2).replace('.', ',') + ' €'; el.className = 'change-display ok'; }
+  }
+
+  // ==================================================================
+  // BUCHEN
+  // ==================================================================
+  function checkout(){
+    if(totalSum === 0) return;
+    const saleItems = Object.keys(cart).map(name => ({ name, price: cart[name].price, qty: cart[name].count }));
+    const sale = { items: saleItems, total: totalSum, ts: Date.now() };
+    const clientId = 'sale-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+    setCheckoutButtonState('saving');
+    attemptSaveSale(clientId, sale, 0);
+  }
+  async function attemptSaveSale(clientId, sale, attempt){
+    try{
+      setSyncBadge('syncing');
+      const res = await gasPost({ type:'sale', clientId, items: sale.items, total: sale.total, ts: sale.ts });
+      knownSales[res.id || clientId] = sale;
+      rebuildTallyFromKnownSales();
+      pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
+      renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
+      showToast('✅ Buchung gespeichert'); clearCart();
+    }catch(e){
+      if(attempt < RETRY_DELAYS.length){
+        setSyncBadge('offline'); setCheckoutButtonState('retrying', attempt + 1);
+        setTimeout(() => attemptSaveSale(clientId, sale, attempt + 1), RETRY_DELAYS[attempt]);
+      }else{
+        setSyncBadge('offline'); setCheckoutButtonState('idle');
+        if(!pendingFailedSales.find(p => p.clientId === clientId)) pendingFailedSales.push({ clientId, sale });
+        renderFailBanner(); // Bon bleibt erhalten, nichts wird verworfen
+      }
+    }
+  }
+  function retryAllFailed(){ [...pendingFailedSales].forEach(item => attemptSaveSale(item.clientId, item.sale, 0)); }
+  function setCheckoutButtonState(state, attempt){
+    const btn = document.getElementById('checkoutBtn');
+    if(state === 'saving'){ btn.disabled = true; btn.textContent = 'Wird gespeichert …'; }
+    else if(state === 'retrying'){ btn.textContent = 'Erneuter Versuch (' + attempt + '/' + RETRY_DELAYS.length + ') …'; }
+    else{ btn.disabled = (totalSum === 0); btn.textContent = 'KASSIEREN / BUCHEN'; }
+  }
+  function renderFailBanner(){
+    const el = document.getElementById('failBanner');
+    if(pendingFailedSales.length === 0){ el.innerHTML = ''; return; }
+    const sum = pendingFailedSales.reduce((s,p) => s + p.sale.total, 0);
+    el.innerHTML = `<div class="banner-fail"><span>⚠️ ${pendingFailedSales.length} Buchung(en) noch nicht gespeichert (${sum.toFixed(2).replace('.', ',')} €) – Bon bleibt erhalten.</span><button onclick="retryAllFailed()">Erneut senden</button></div>`;
+  }
+  function showToast(msg){ const t = document.getElementById('toastSuccess'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
+
+  // ==================================================================
+  // TAGES-STRICHLISTE
+  // ==================================================================
+  async function pollTally(){
+    try{
+      setSyncBadge('syncing');
+      const rows = await gasGet('sales');
+      knownSales = {};
+      rows.forEach(r => { knownSales[r.id] = { items: r.items, total: parseFloat(r.total) }; });
+      rebuildTallyFromKnownSales(); setSyncBadge('ok');
+    }catch(e){ setSyncBadge('offline'); }
+  }
+  function rebuildTallyFromKnownSales(){
+    dayTally = {}; daySum = 0;
+    Object.values(knownSales).forEach(sale => {
+      daySum += sale.total;
+      sale.items.forEach(it => { dayTally[it.name] = (dayTally[it.name] || 0) + it.qty; });
+    });
+    updateTallyDisplay();
+  }
+  function updateTallyDisplay(){
+    const tallyDiv = document.getElementById('tallyList');
+    tallyDiv.innerHTML = '';
+    const items = Object.keys(dayTally);
+    if(items.length === 0){ tallyDiv.innerHTML = '<span style="color:#c3bcae;">Noch nichts gebucht.</span>'; }
+    else{ items.sort().forEach(item => { tallyDiv.innerHTML += `<div class="tally-item"><span>${item}</span><span>${dayTally[item]} Stück</span></div>`; }); }
+    document.getElementById('dayTotal').innerText = 'Gesamtumsatz: ' + daySum.toFixed(2).replace('.', ',') + ' €';
+  }
+
+  init();
+</script>
+</body>
+</html>
