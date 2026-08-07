@@ -327,7 +327,6 @@
   let cashGiven = null;
   let currentAddCategory = null;
 
-  let knownSales = {};          // id -> sale
   let customProducts = { bier:{}, wein:{}, 'wein-flaschen':{} }; // category -> id -> {name, price}
   let pendingFailedSales = [];
   let dayTally = {};
@@ -366,11 +365,11 @@
       document.getElementById('fatalOverlay').style.display = 'flex';
       return;
     }
-    try{ await Promise.all([pollTally(), loadCustomProducts()]); }
+    try{ await Promise.all([pollSummary(), loadCustomProducts()]); }
     catch(e){ /* Erst-Sync kann fehlschlagen, Polling versucht es weiter */ }
     document.getElementById('loadingOverlay').style.display = 'none';
     renderCart();
-    syncTimer = setInterval(() => { pollTally(); loadCustomProducts(); }, 8000);
+    syncTimer = setInterval(() => { pollSummary(); loadCustomProducts(); }, 8000);
   }
 
   function setSyncBadge(state){
@@ -531,12 +530,6 @@
     const totalCount = items.reduce((s,i) => s + cart[i].count, 0);
     document.getElementById('mctCount').textContent = totalCount;
     document.getElementById('mctTotal').textContent = totalSum.toFixed(2).replace('.', ',') + ' €';
-    // Bon automatisch aufklappen, sobald etwas drin ist – auf dem Handy sonst leicht zu übersehen
-    const sb = document.getElementById('sidebar');
-    if(totalCount > 0 && window.innerWidth <= 760 && !sb.classList.contains('expanded')){
-      sb.classList.add('expanded');
-      document.getElementById('mctChevron').textContent = '▼';
-    }
   }
   function clearCart(){
     cart = {}; cashGiven = null; document.getElementById('cashInput').value = '';
@@ -582,12 +575,11 @@
   async function attemptSaveSale(clientId, sale, attempt){
     try{
       setSyncBadge('syncing');
-      const res = await gasPost({ type:'sale', clientId, items: sale.items, total: sale.total, ts: sale.ts });
-      knownSales[res.id || clientId] = sale;
-      rebuildTallyFromKnownSales();
+      await gasPost({ type:'sale', clientId, hut: currentHut, items: sale.items, total: sale.total, ts: sale.ts });
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
       renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
       showToast('✅ Buchung gespeichert'); clearCart();
+      pollSummary(); // Strichliste direkt danach aktualisieren
     }catch(e){
       if(attempt < RETRY_DELAYS.length){
         setSyncBadge('offline'); setCheckoutButtonState('retrying', attempt + 1);
@@ -615,24 +607,16 @@
   function showToast(msg){ const t = document.getElementById('toastSuccess'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
 
   // ==================================================================
-  // TAGES-STRICHLISTE
+  // TAGES-STRICHLISTE – kommt direkt aus dem "Summary"-Tabellenblatt
   // ==================================================================
-  async function pollTally(){
+  async function pollSummary(){
     try{
       setSyncBadge('syncing');
-      const rows = await gasGet('sales');
-      knownSales = {};
-      rows.forEach(r => { knownSales[r.id] = { items: r.items, total: parseFloat(r.total) }; });
-      rebuildTallyFromKnownSales(); setSyncBadge('ok');
+      const rows = await gasGet('summary');
+      dayTally = {}; daySum = 0;
+      rows.forEach(r => { dayTally[r.name] = r.qty; daySum += Number(r.revenue); });
+      updateTallyDisplay(); setSyncBadge('ok');
     }catch(e){ setSyncBadge('offline'); }
-  }
-  function rebuildTallyFromKnownSales(){
-    dayTally = {}; daySum = 0;
-    Object.values(knownSales).forEach(sale => {
-      daySum += sale.total;
-      sale.items.forEach(it => { dayTally[it.name] = (dayTally[it.name] || 0) + it.qty; });
-    });
-    updateTallyDisplay();
   }
   function updateTallyDisplay(){
     const tallyDiv = document.getElementById('tallyList');
@@ -647,3 +631,4 @@
 </script>
 </body>
 </html>
+
