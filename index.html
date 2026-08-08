@@ -314,6 +314,9 @@
       { name:'Wasser',               price:3.90,  emoji:'💧', swatch:'mint'  },
     ],
     wein: [
+      { name:'Rosé (Glas)',          price:6.00,  emoji:'🍷', swatch:'rose'  },
+      { name:'Grauburgunder (Glas)', price:6.00,  emoji:'🍷', swatch:'rose'  },
+      { name:'Weinschorle',          price:6.00,  emoji:'🥂', swatch:'rose'  },
       { name:'Glücklich Spritz',     price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol Spritz',        price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol 0,0%',          price:7.50,  emoji:'🍹', swatch:'peach' },
@@ -614,6 +617,7 @@
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
       renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
       showToast('✅ Buchung gespeichert (' + (sale.payment === 'ec' ? 'EC' : 'BAR') + ')'); clearCart();
+      if(currentSub){ currentSub = null; renderShop(); } // nach Buchung zurück zur Hütten-Hauptseite
       pollSummary(); pollPayments(); // Strichliste direkt danach aktualisieren
     }catch(e){
       if(attempt < RETRY_DELAYS.length){
