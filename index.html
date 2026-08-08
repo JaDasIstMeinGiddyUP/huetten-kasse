@@ -149,8 +149,12 @@
   .change-display.bad{ color:var(--red-clear); }
   .change-display.neutral{ color:#c3bcae; font-weight:600; font-size:12.5px; }
   .action-btn{ padding:14px; border:none; border-radius:14px; font-size:15px; font-weight:700; cursor:pointer; margin-bottom:8px; font-family:'Poppins',sans-serif; }
+  .checkout-row{ display:flex; gap:8px; margin-bottom:8px; }
+  .checkout-row .action-btn{ flex:1; margin-bottom:0; }
   .btn-checkout{ background:var(--green-ok); color:#fff; }
   .btn-checkout:disabled{ background:#bcbcbc; cursor:default; }
+  .btn-checkout-ec{ background:var(--sky-ac); color:#fff; }
+  .btn-checkout-ec:disabled{ background:#bcbcbc; cursor:default; }
   .btn-clear{ background:#fdeceb; color:var(--red-clear); }
   .tally-section{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:13px; margin-top:10px; flex-shrink:0; display:flex; flex-direction:column; }
   .tally-title{ font-size:12.5px; font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
@@ -249,10 +253,23 @@
         <button class="action-btn btn-clear" onclick="clearCart()">Bon leeren</button>
         <div class="tally-section">
           <div class="tally-title">📊 Tages-Strichliste (alle Geräte)</div>
+          <div id="paymentSplit" style="font-size:12.5px; font-weight:700; color:var(--sub); margin-bottom:8px; display:flex; justify-content:space-between;"></div>
           <div class="tally-list" id="tallyList"></div>
           <div id="dayTotal">Gesamtumsatz: 0,00 €</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="paymentModal">
+    <div class="modal-box">
+      <h3>Zahlungsart wählen</h3>
+      <p style="color:var(--sub); font-size:13px; margin-bottom:6px;">Summe: <strong id="paymentModalSum" style="color:var(--ink);"></strong></p>
+      <div class="checkout-row" style="margin-top:16px;">
+        <button class="action-btn btn-checkout" onclick="confirmCheckout('bar')">💶 BAR</button>
+        <button class="action-btn btn-checkout-ec" onclick="confirmCheckout('ec')">💳 EC</button>
+      </div>
+      <button class="modal-cancel" style="width:100%; padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-family:'Poppins',sans-serif;" onclick="closePaymentModal()">Abbrechen</button>
     </div>
   </div>
 
@@ -278,7 +295,7 @@
   // ==================================================================
   // ⚠️ HIER DIE WEB-APP-URL DES GOOGLE APPS SCRIPTS EINTRAGEN
   // ==================================================================
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbwjmRGePydGKUHkz20sRYee3llFlfisoIygJx0ugsNwABzr9suF8hknNg093plvAr8/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxcp5LV-KIylrWBhNGX-TYGKq4DqjmOUWiaz0py3g2zvGO6_GyY-gYY6i1bUgrNM7-a/exec";
 
   // ==================================================================
   // PRODUKTDATEN (Grundkarte – fest, nicht löschbar)
@@ -299,6 +316,8 @@
     wein: [
       { name:'Glücklich Spritz',     price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol Spritz',        price:8.90,  emoji:'🍹', swatch:'peach' },
+      { name:'Aperol 0,0%',          price:7.50,  emoji:'🍹', swatch:'peach' },
+      { name:'Herbias Shot',         price:5.00,  emoji:'🥃', swatch:'amber' },
       { name:'Estrella 0,33L',       price:4.50,  emoji:'🍺', swatch:'amber' },
       { name:'Wasser 0,75L',         price:6.90,  emoji:'💧', swatch:'mint'  },
       { name:'Wasser 0,33L',         price:3.90,  emoji:'💧', swatch:'mint'  },
@@ -306,10 +325,17 @@
   };
   const BOTTLES = {
     wein: [
-      { name:'Grauburgunder',         price:25.00, emoji:'🍷', swatch:'rose' },
-      { name:'Rosé (Feinherb)',       price:25.00, emoji:'🍷', swatch:'rose' },
-      { name:'Seelenblick (trocken)', price:29.00, emoji:'🍇', swatch:'rose' },
-      { name:'Seelenblick Magnum',    price:58.00, emoji:'🍾', swatch:'rose' },
+      { name:'Grauburgunder',              price:25.00, emoji:'🍷', swatch:'rose' },
+      { name:'Rosé (Feinherb)',            price:25.00, emoji:'🍷', swatch:'rose' },
+      { name:'Seelenblick (trocken)',      price:29.00, emoji:'🍇', swatch:'rose' },
+      { name:'Seelenblick Magnum',         price:58.00, emoji:'🍾', swatch:'rose' },
+      { name:'Kinheimer Riesling feinherb',price:32.00, emoji:'🍷', swatch:'rose' },
+      { name:'Kalkmergel Chardonnay',      price:36.00, emoji:'🍷', swatch:'rose' },
+      { name:'Goldmuskateller',            price:42.00, emoji:'🍷', swatch:'rose' },
+      { name:'Des Mille Rocs Chenin Blanc',price:59.00, emoji:'🍷', swatch:'rose' },
+      { name:'L\'Espérance Rosé',          price:34.00, emoji:'🌹', swatch:'rose' },
+      { name:'La 50/50 Cuvée',             price:39.00, emoji:'🍇', swatch:'rose' },
+      { name:'Herbias Flasche',            price:80.00, emoji:'🍾', swatch:'rose' },
     ]
   };
   // Kategorien, in denen man per "+" selbst Getränke ergänzen kann
@@ -367,11 +393,11 @@
       document.getElementById('fatalOverlay').style.display = 'flex';
       return;
     }
-    try{ await Promise.all([pollSummary(), loadCustomProducts()]); }
+    try{ await Promise.all([pollSummary(), pollPayments(), loadCustomProducts()]); }
     catch(e){ /* Erst-Sync kann fehlschlagen, Polling versucht es weiter */ }
     document.getElementById('loadingOverlay').style.display = 'none';
     renderCart();
-    syncTimer = setInterval(() => { pollSummary(); loadCustomProducts(); }, 8000);
+    syncTimer = setInterval(() => { pollSummary(); pollPayments(); loadCustomProducts(); }, 8000);
   }
 
   function setSyncBadge(state){
@@ -564,12 +590,19 @@
   }
 
   // ==================================================================
-  // BUCHEN
+  // BUCHEN – mit Auswahl der Zahlungsart (EC / BAR)
   // ==================================================================
   function checkout(){
     if(totalSum === 0) return;
+    document.getElementById('paymentModalSum').textContent = totalSum.toFixed(2).replace('.', ',') + ' €';
+    document.getElementById('paymentModal').classList.add('show');
+  }
+  function closePaymentModal(){ document.getElementById('paymentModal').classList.remove('show'); }
+
+  function confirmCheckout(method){
+    closePaymentModal();
     const saleItems = Object.keys(cart).map(name => ({ name, price: cart[name].price, qty: cart[name].count }));
-    const sale = { items: saleItems, total: totalSum, ts: Date.now() };
+    const sale = { items: saleItems, total: totalSum, ts: Date.now(), payment: method };
     const clientId = 'sale-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
     setCheckoutButtonState('saving');
     attemptSaveSale(clientId, sale, 0);
@@ -577,11 +610,11 @@
   async function attemptSaveSale(clientId, sale, attempt){
     try{
       setSyncBadge('syncing');
-      await gasPost({ type:'sale', clientId, hut: currentHut, items: sale.items, total: sale.total, ts: sale.ts });
+      await gasPost({ type:'sale', clientId, hut: currentHut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts });
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
       renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
-      showToast('✅ Buchung gespeichert'); clearCart();
-      pollSummary(); // Strichliste direkt danach aktualisieren
+      showToast('✅ Buchung gespeichert (' + (sale.payment === 'ec' ? 'EC' : 'BAR') + ')'); clearCart();
+      pollSummary(); pollPayments(); // Strichliste direkt danach aktualisieren
     }catch(e){
       if(attempt < RETRY_DELAYS.length){
         setSyncBadge('offline'); setCheckoutButtonState('retrying', attempt + 1);
@@ -619,6 +652,15 @@
       rows.forEach(r => { dayTally[r.name] = r.qty; daySum += Number(r.revenue); });
       updateTallyDisplay(); setSyncBadge('ok');
     }catch(e){ setSyncBadge('offline'); }
+  }
+  async function pollPayments(){
+    try{
+      const rows = await gasGet('payments');
+      let bar = 0, ec = 0;
+      rows.forEach(r => { if(r.method === 'bar') bar = Number(r.revenue); if(r.method === 'ec') ec = Number(r.revenue); });
+      document.getElementById('paymentSplit').innerHTML =
+        '<span>💶 Bar: ' + bar.toFixed(2).replace('.', ',') + ' €</span><span>💳 EC: ' + ec.toFixed(2).replace('.', ',') + ' €</span>';
+    }catch(e){ /* beim nächsten Poll erneut versuchen */ }
   }
   function updateTallyDisplay(){
     const tallyDiv = document.getElementById('tallyList');
