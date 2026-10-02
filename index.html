@@ -206,6 +206,20 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="deviceModal" style="z-index:998;">
+    <div class="modal-box">
+      <h3>📱 Gerät benennen</h3>
+      <p style="color:var(--sub); font-size:13px; margin-bottom:6px;">Einmalig: Name des Geräts oder der Person, die damit kassiert (z. B. "iPad Theke" oder dein Name). Wird bei Stornierungen mitgeloggt.</p>
+      <input type="text" id="deviceInput" maxlength="30"
+        style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); font-family:'Poppins',sans-serif; font-size:16px; margin-top:10px;"
+        placeholder="z. B. iPad 1 / Max" onkeydown="if(event.key==='Enter') saveDeviceName();">
+      <div id="deviceError" style="color:var(--red-clear); font-size:12.5px; font-weight:700; text-align:center; min-height:18px; margin-top:8px;"></div>
+      <div class="modal-actions">
+        <button class="modal-save" style="width:100%;" onclick="saveDeviceName()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
   <div id="home" class="screen active">
     <div class="home-header">
       <div class="brandmark">
@@ -245,7 +259,7 @@
         <div class="shop-title" id="shopTitle">Bier-Hütte</div>
       </div>
       <div class="topbar-right">
-        <div class="sync-badge ok" id="syncBadge"><span class="dot"></span><span id="syncText">Verbunden</span></div>
+        <div class="sync-badge ok" id="syncBadge" ondblclick="changeDeviceName()" title="Doppeltipp: Gerätename ändern"><span class="dot"></span><span id="syncText">Verbunden</span></div>
         <div class="hut-switch">
           <button id="switchBier" class="bier" onclick="switchHut('bier')">🍺 Bier</button>
           <button id="switchWein" class="wein" onclick="switchHut('wein')">🍷 Wein</button>
@@ -436,11 +450,39 @@
       document.getElementById('pinModal').classList.remove('show');
       document.getElementById('pinInput').value = '';
       document.getElementById('pinError').textContent = '';
+      ensureDeviceName();
     }else{
       document.getElementById('pinError').textContent = 'Falscher PIN.';
       document.getElementById('pinInput').value = '';
       document.getElementById('pinInput').focus();
     }
+  }
+
+  // ==================================================================
+  // GERÄTENAME – einmalig pro Gerät/Browser, wird bei Stornierungen mitgeloggt
+  // ==================================================================
+  let deviceName = localStorage.getItem('kasse_device_name') || '';
+  function ensureDeviceName(){
+    if(deviceName){ return; }
+    document.getElementById('deviceModal').classList.add('show');
+    document.getElementById('deviceInput').focus();
+  }
+  function saveDeviceName(){
+    const val = document.getElementById('deviceInput').value.trim();
+    if(!val){
+      document.getElementById('deviceError').textContent = 'Bitte einen Namen eingeben.';
+      return;
+    }
+    deviceName = val;
+    localStorage.setItem('kasse_device_name', val);
+    document.getElementById('deviceModal').classList.remove('show');
+    document.getElementById('deviceError').textContent = '';
+  }
+  // Über Doppeltipp auf den Sync-Badge kann der Gerätename nachträglich geändert werden
+  function changeDeviceName(){
+    document.getElementById('deviceInput').value = deviceName;
+    document.getElementById('deviceModal').classList.add('show');
+    document.getElementById('deviceInput').focus();
   }
 
   // ==================================================================
@@ -672,7 +714,7 @@
   async function attemptSaveSale(clientId, sale, attempt){
     try{
       setSyncBadge('syncing');
-      await gasPost({ type:'sale', clientId, hut: currentHut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts });
+      await gasPost({ type:'sale', clientId, hut: currentHut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts, device: deviceName || 'unbekannt' });
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
       recentSales.unshift({ clientId, total: sale.total, payment: sale.payment, hut: currentHut, ts: sale.ts, cancelled: false });
       renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
@@ -742,7 +784,7 @@
   async function cancelSale(clientId){
     if(!confirm('Diese Buchung wirklich stornieren?')) return;
     try{
-      await gasPost({ type:'cancel_sale', clientId });
+      await gasPost({ type:'cancel_sale', clientId, device: deviceName || 'unbekannt' });
       recentSales = recentSales.map(s => s.clientId === clientId ? { ...s, cancelled:true } : s);
       renderCancelList();
       showToast('↩️ Buchung storniert');
