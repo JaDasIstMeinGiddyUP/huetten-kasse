@@ -46,6 +46,8 @@
   .hut-card:active{ transform:scale(0.97); }
   .hut-card.bier{ background:linear-gradient(160deg, var(--amber-bg), #fff8ec); }
   .hut-card.wein{ background:linear-gradient(160deg, var(--rose-bg), #fff5f8); }
+  .hut-card.cocktail{ background:linear-gradient(160deg, var(--sky-bg), #f2f8ff); }
+  .hut-card.cocktail h2{ color:var(--sky-ac); }
   .hut-icon{ width:100px; height:100px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:48px; margin-bottom:20px; background:rgba(255,255,255,0.65); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.9); }
   .hut-card h2{ font-family:'Dancing Script',cursive; font-weight:700; font-size:36px; margin-bottom:8px; }
@@ -62,11 +64,13 @@
   .shop-title{ font-family:'Dancing Script',cursive; font-weight:700; font-size:27px; }
   #shop.mode-bier .shop-title{ color:var(--amber-ac); }
   #shop.mode-wein .shop-title{ color:var(--rose-ac); }
+  #shop.mode-cocktail .shop-title{ color:var(--sky-ac); }
   .topbar-right{ display:flex; align-items:center; gap:10px; }
   .hut-switch{ display:flex; gap:6px; background:#f6f4f0; padding:5px; border-radius:14px; }
   .hut-switch button{ border:none; background:transparent; padding:8px 14px; border-radius:10px; font-weight:600; font-size:12px; cursor:pointer; color:var(--sub); font-family:'Poppins',sans-serif; }
   .hut-switch button.on.bier{ background:var(--amber-bg); color:var(--amber-ac); }
   .hut-switch button.on.wein{ background:var(--rose-bg); color:var(--rose-ac); }
+  .hut-switch button.on.cocktail{ background:var(--sky-bg); color:var(--sky-ac); }
   .sync-badge{ font-size:11px; font-weight:700; padding:6px 11px; border-radius:20px; display:flex; align-items:center; gap:6px; white-space:nowrap; }
   .sync-badge .dot{ width:7px; height:7px; border-radius:50%; }
   .sync-badge.ok{ background:#e6f7ef; color:#0a7a51; } .sync-badge.ok .dot{ background:#0a7a51; }
@@ -188,6 +192,20 @@
     <p>Im Code fehlt noch die Web-App-URL des Google Apps Scripts. Trag sie in der Zeile <code>const GAS_URL = "..."</code> ganz oben im Script ein und lade die Seite neu.</p>
   </div>
 
+  <div class="modal-overlay" id="pinModal" style="z-index:999;">
+    <div class="modal-box">
+      <h3>🔒 PIN eingeben</h3>
+      <p style="color:var(--sub); font-size:13px; margin-bottom:6px;">Zugang nur mit Code.</p>
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" id="pinInput"
+        style="width:100%; padding:14px 12px; border-radius:10px; border:1px solid var(--line); font-family:'Poppins',sans-serif; font-size:22px; letter-spacing:6px; text-align:center; margin-top:10px;"
+        placeholder="••••" onkeydown="if(event.key==='Enter') checkPin();">
+      <div id="pinError" style="color:var(--red-clear); font-size:12.5px; font-weight:700; text-align:center; min-height:18px; margin-top:8px;"></div>
+      <div class="modal-actions">
+        <button class="modal-save" style="width:100%;" onclick="checkPin()">Entsperren</button>
+      </div>
+    </div>
+  </div>
+
   <div id="home" class="screen active">
     <div class="home-header">
       <div class="brandmark">
@@ -210,6 +228,12 @@
         <p>Wein, Spritz &amp; erfrischende Getränke</p>
         <div class="tap-hint">Antippen zum Öffnen</div>
       </div>
+      <div class="hut-card cocktail" onclick="openShop('cocktail')">
+        <div class="hut-icon">🍸</div>
+        <h2>Cocktail-Hütte</h2>
+        <p>Cocktails, Long Island &amp; Glühwein</p>
+        <div class="tap-hint">Antippen zum Öffnen</div>
+      </div>
     </div>
   </div>
 
@@ -225,6 +249,7 @@
         <div class="hut-switch">
           <button id="switchBier" class="bier" onclick="switchHut('bier')">🍺 Bier</button>
           <button id="switchWein" class="wein" onclick="switchHut('wein')">🍷 Wein</button>
+          <button id="switchCocktail" class="cocktail" onclick="switchHut('cocktail')">🍸 Cocktail</button>
         </div>
       </div>
     </div>
@@ -251,13 +276,19 @@
         </div>
         <button class="action-btn btn-checkout" id="checkoutBtn" onclick="checkout()">KASSIEREN / BUCHEN</button>
         <button class="action-btn btn-clear" onclick="clearCart()">Bon leeren</button>
-        <div class="tally-section">
-          <div class="tally-title">📊 Tages-Strichliste (alle Geräte)</div>
-          <div id="paymentSplit" style="font-size:12.5px; font-weight:700; color:var(--sub); margin-bottom:8px; display:flex; justify-content:space-between;"></div>
-          <div class="tally-list" id="tallyList"></div>
-          <div id="dayTotal">Gesamtumsatz: 0,00 €</div>
+        <div style="text-align:center; margin-top:4px;">
+          <span onclick="openCancelModal()" style="font-size:11px; color:#c3bcae; cursor:pointer; text-decoration:underline; text-underline-offset:2px;">Buchung stornieren</span>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="cancelModal">
+    <div class="modal-box" style="max-width:360px;">
+      <h3>Buchung stornieren</h3>
+      <p style="color:var(--sub); font-size:13px; margin-bottom:10px;">Letzte Buchungen antippen, um sie zu stornieren.</p>
+      <div id="cancelList" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px;"></div>
+      <button class="modal-cancel" style="width:100%; margin-top:14px; padding:12px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-family:'Poppins',sans-serif;" onclick="closeCancelModal()">Schließen</button>
     </div>
   </div>
 
@@ -320,10 +351,18 @@
       { name:'Glücklich Spritz',     price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol Spritz',        price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol 0,0%',          price:7.50,  emoji:'🍹', swatch:'peach' },
+      { name:'Erdbeer Secco',        price:8.90,  emoji:'🍓', swatch:'peach' },
+      { name:'Erdbeer Secco 0,0%',   price:7.50,  emoji:'🍓', swatch:'peach' },
       { name:'Herbias Shot',         price:5.00,  emoji:'🥃', swatch:'amber' },
       { name:'Estrella 0,33L',       price:4.50,  emoji:'🍺', swatch:'amber' },
       { name:'Wasser 0,75L',         price:6.90,  emoji:'💧', swatch:'mint'  },
       { name:'Wasser 0,33L',         price:3.90,  emoji:'💧', swatch:'mint'  },
+    ],
+    cocktail: [
+      { name:'Cocktails',            price:9.90,  emoji:'🍸', swatch:'sky'   },
+      { name:'Alkoholfreie Cocktails', price:8.90, emoji:'🍹', swatch:'mint' },
+      { name:'Long Island Ice Tea',  price:10.90, emoji:'🧉', swatch:'amber' },
+      { name:'Glühwein',             price:5.00,  emoji:'🍷', swatch:'rose'  },
     ]
   };
   const BOTTLES = {
@@ -346,6 +385,7 @@
     'bier':          { swatch:'amber', defaultEmoji:'🍺', label:'Bier-Hütte' },
     'wein':          { swatch:'peach', defaultEmoji:'🥤', label:'Wein-Hütte' },
     'wein-flaschen': { swatch:'rose',  defaultEmoji:'🍷', label:'Weinkarte (Flasche)' },
+    'cocktail':      { swatch:'sky',   defaultEmoji:'🍸', label:'Cocktail-Hütte' },
   };
 
   // ==================================================================
@@ -358,13 +398,13 @@
   let cashGiven = null;
   let currentAddCategory = null;
 
-  let customProducts = { bier:{}, wein:{}, 'wein-flaschen':{} }; // category -> id -> {name, price}
+  let customProducts = { bier:{}, wein:{}, 'wein-flaschen':{}, cocktail:{} }; // category -> id -> {name, price}
   let pendingFailedSales = [];
-  let dayTally = {};
-  let daySum = 0;
+  let recentSales = []; // für Storno
   let syncTimer = null;
 
   const RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000];
+  const PIN_CODE = '6420';
 
   // ==================================================================
   // BACKEND-KOMMUNIKATION (Google Apps Script)
@@ -388,19 +428,37 @@
   }
 
   // ==================================================================
+  // PIN-SPERRE
+  // ==================================================================
+  function checkPin(){
+    const val = document.getElementById('pinInput').value;
+    if(val === PIN_CODE){
+      document.getElementById('pinModal').classList.remove('show');
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinError').textContent = '';
+    }else{
+      document.getElementById('pinError').textContent = 'Falscher PIN.';
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinInput').focus();
+    }
+  }
+
+  // ==================================================================
   // INIT
   // ==================================================================
   async function init(){
+    document.getElementById('pinModal').classList.add('show');
+    document.getElementById('pinInput').focus();
     if(!GAS_URL || GAS_URL.indexOf('PASTE_YOUR') === 0){
       document.getElementById('loadingOverlay').style.display = 'none';
       document.getElementById('fatalOverlay').style.display = 'flex';
       return;
     }
-    try{ await Promise.all([pollSummary(), pollPayments(), loadCustomProducts()]); }
+    try{ await loadCustomProducts(); }
     catch(e){ /* Erst-Sync kann fehlschlagen, Polling versucht es weiter */ }
     document.getElementById('loadingOverlay').style.display = 'none';
     renderCart();
-    syncTimer = setInterval(() => { pollSummary(); pollPayments(); loadCustomProducts(); }, 8000);
+    syncTimer = setInterval(() => { loadCustomProducts(); }, 8000);
   }
 
   function setSyncBadge(state){
@@ -426,10 +484,11 @@
 
   function renderShop(){
     const shopEl = document.getElementById('shop');
-    shopEl.classList.remove('mode-bier','mode-wein');
+    shopEl.classList.remove('mode-bier','mode-wein','mode-cocktail');
     shopEl.classList.add('mode-' + currentHut);
     document.getElementById('switchBier').classList.toggle('on', currentHut === 'bier');
     document.getElementById('switchWein').classList.toggle('on', currentHut === 'wein');
+    document.getElementById('switchCocktail').classList.toggle('on', currentHut === 'cocktail');
 
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
@@ -615,10 +674,10 @@
       setSyncBadge('syncing');
       await gasPost({ type:'sale', clientId, hut: currentHut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts });
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
+      recentSales.unshift({ clientId, total: sale.total, payment: sale.payment, hut: currentHut, ts: sale.ts, cancelled: false });
       renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
       showToast('✅ Buchung gespeichert (' + (sale.payment === 'ec' ? 'EC' : 'BAR') + ')'); clearCart();
       if(currentSub){ currentSub = null; renderShop(); } // nach Buchung zurück zur Hütten-Hauptseite
-      pollSummary(); pollPayments(); // Strichliste direkt danach aktualisieren
     }catch(e){
       if(attempt < RETRY_DELAYS.length){
         setSyncBadge('offline'); setCheckoutButtonState('retrying', attempt + 1);
@@ -646,33 +705,48 @@
   function showToast(msg){ const t = document.getElementById('toastSuccess'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
 
   // ==================================================================
-  // TAGES-STRICHLISTE – kommt direkt aus dem "Summary"-Tabellenblatt
+  // STORNIEREN – letzte Buchungen anzeigen und per Antippen stornieren
   // ==================================================================
-  async function pollSummary(){
+  async function openCancelModal(){
+    const modal = document.getElementById('cancelModal');
+    const list = document.getElementById('cancelList');
+    list.innerHTML = '<div style="text-align:center; color:#c3bcae; padding:16px 0;">Lade Buchungen …</div>';
+    modal.classList.add('show');
     try{
-      setSyncBadge('syncing');
-      const rows = await gasGet('summary');
-      dayTally = {}; daySum = 0;
-      rows.forEach(r => { dayTally[r.name] = r.qty; daySum += Number(r.revenue); });
-      updateTallyDisplay(); setSyncBadge('ok');
-    }catch(e){ setSyncBadge('offline'); }
+      const rows = await gasGet('recent');
+      recentSales = rows || [];
+      renderCancelList();
+    }catch(e){
+      list.innerHTML = '<div style="text-align:center; color:var(--red-clear); padding:16px 0;">Konnte Buchungen nicht laden.</div>';
+    }
   }
-  async function pollPayments(){
+  function closeCancelModal(){ document.getElementById('cancelModal').classList.remove('show'); }
+  function renderCancelList(){
+    const list = document.getElementById('cancelList');
+    list.innerHTML = '';
+    if(!recentSales || recentSales.length === 0){
+      list.innerHTML = '<div style="text-align:center; color:#c3bcae; padding:16px 0;">Keine Buchungen gefunden.</div>';
+      return;
+    }
+    recentSales.forEach(sale => {
+      if(sale.cancelled) return;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; cursor:pointer;';
+      const time = sale.ts ? new Date(Number(sale.ts)).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) : '';
+      row.innerHTML = `<div><div style="font-weight:700; font-size:13.5px;">${(sale.total||0).toFixed ? sale.total.toFixed(2).replace('.', ',') : sale.total} €</div><div style="font-size:11.5px; color:var(--sub);">${time} · ${sale.hut || ''} · ${sale.payment === 'ec' ? 'EC' : 'BAR'}</div></div><span style="color:var(--red-clear); font-weight:700; font-size:12px;">Stornieren</span>`;
+      row.onclick = () => cancelSale(sale.clientId);
+      list.appendChild(row);
+    });
+    if(list.innerHTML === '') list.innerHTML = '<div style="text-align:center; color:#c3bcae; padding:16px 0;">Keine offenen Buchungen.</div>';
+  }
+  async function cancelSale(clientId){
+    if(!confirm('Diese Buchung wirklich stornieren?')) return;
     try{
-      const rows = await gasGet('payments');
-      let bar = 0, ec = 0;
-      rows.forEach(r => { if(r.method === 'bar') bar = Number(r.revenue); if(r.method === 'ec') ec = Number(r.revenue); });
-      document.getElementById('paymentSplit').innerHTML =
-        '<span>💶 Bar: ' + bar.toFixed(2).replace('.', ',') + ' €</span><span>💳 EC: ' + ec.toFixed(2).replace('.', ',') + ' €</span>';
-    }catch(e){ /* beim nächsten Poll erneut versuchen */ }
-  }
-  function updateTallyDisplay(){
-    const tallyDiv = document.getElementById('tallyList');
-    tallyDiv.innerHTML = '';
-    const items = Object.keys(dayTally);
-    if(items.length === 0){ tallyDiv.innerHTML = '<span style="color:#c3bcae;">Noch nichts gebucht.</span>'; }
-    else{ items.sort().forEach(item => { tallyDiv.innerHTML += `<div class="tally-item"><span>${item}</span><span>${dayTally[item]} Stück</span></div>`; }); }
-    document.getElementById('dayTotal').innerText = 'Gesamtumsatz: ' + daySum.toFixed(2).replace('.', ',') + ' €';
+      await gasPost({ type:'cancel_sale', clientId });
+      recentSales = recentSales.map(s => s.clientId === clientId ? { ...s, cancelled:true } : s);
+      renderCancelList();
+      showToast('↩️ Buchung storniert');
+    }catch(e){ alert('Stornieren fehlgeschlagen – bitte nochmal versuchen.'); }
   }
 
   init();
