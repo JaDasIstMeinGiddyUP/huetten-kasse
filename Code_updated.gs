@@ -4,20 +4,29 @@
  * Diese Datei kommt komplett in den Apps-Script-Editor deines Google Sheets
  * (Erweiterungen → Apps Script) — ersetzt den kompletten bisherigen Inhalt.
  *
- * Erwartet VIER Tabellenblätter im Sheet:
+ * Erwartet Tabellenblätter im Sheet:
  *   "Sales"    Kopfzeile: sale_id | timestamp | zahlungsart | huette | artikel | menge | einzelpreis | zeilensumme | storniert | gebucht_von | storniert_von | storno_grund
  *              -> jede Buchung wird zeilenweise pro Artikel eingetragen, gut lesbar, keine JSON-Klumpen
  *              -> Spalte 9 "storniert" (TRUE/leer) markiert stornierte Buchungen
  *              -> Spalte 10 "gebucht_von" = Gerätename/Person, die gebucht hat
  *              -> Spalte 11 "storniert_von" = Gerätename/Person, die storniert hat
- *              -> NEU: Spalte 12 "storno_grund" = vom Personal eingegebene Begründung der Stornierung
- *   "Summary"  Kopfzeile: artikel | menge | umsatz
- *   "Payments" Kopfzeile: zahlungsart | umsatz
+ *              -> Spalte 12 "storno_grund" = vom Personal eingegebene Begründung der Stornierung
+ *   "Summary"  (nicht mehr live beschrieben, siehe PERFORMANCE-FIX unten) Kopfzeile: artikel | menge | umsatz
+ *   "Payments" (nicht mehr live beschrieben, siehe PERFORMANCE-FIX unten) Kopfzeile: zahlungsart | umsatz
  *   "Products" Kopfzeile: id | category | name | price | emoji
  *
- * NEU in dieser Version:
- *   - type=cancel_sale verlangt jetzt "reason" und protokolliert ihn in Spalte 12
- *   - action=recent liefert "cancelReason" mit zurück
+ * PERFORMANCE-FIX (2026-10-03): Bisher wurde bei JEDER Buchung/Stornierung
+ * zusätzlich das komplette "Summary"- und "Payments"-Blatt eingelesen und
+ * zeilenweise durchsucht, um die Summen live nachzuführen. Das machte jede
+ * Buchung umso langsamer, je mehr Buchungen an dem Abend schon im Sheet
+ * standen (merklich spürbar bei stark besuchten Events mit vielen Geräten
+ * gleichzeitig, die sich zusätzlich per LockService hintereinanderreihen).
+ * Jetzt wird bei einer Buchung NUR NOCH die Sales-Zeile angehängt (schnell,
+ * O(1)) — Summary/Payments werden stattdessen bei Bedarf (action=summary /
+ * action=payments) direkt aus "Sales" live berechnet. Für die Kassierenden
+ * ändert sich nichts, nur das ständige "Synchronisiere..." wird spürbar
+ * kürzer bzw. bleibt über den ganzen Abend hinweg gleich schnell statt
+ * immer länger zu dauern.
  */
 
 function onOpen() {
@@ -36,21 +45,11 @@ function doGet(e) {
   }
 
   if (action === 'summary') {
-    const sh = ss.getSheetByName('Summary');
-    const data = sh.getDataRange().getValues();
-    const rows = data.slice(1)
-      .filter(r => r[0])
-      .map(r => ({ name: r[0], qty: r[1], revenue: r[2] }));
-    return jsonOut(rows);
+    return jsonOut(computeAggregates_(ss).summary);
   }
 
   if (action === 'payments') {
-    const sh = ss.getSheetByName('Payments');
-    const data = sh.getDataRange().getValues();
-    const rows = data.slice(1)
-      .filter(r => r[0])
-      .map(r => ({ method: r[0], revenue: r[1] }));
-    return jsonOut(rows);
+    return jsonOut(computeAggregates_(ss).payments);
   }
 
   if (action === 'products') {
@@ -67,6 +66,35 @@ function doGet(e) {
   }
 
   return jsonOut({ error: 'unbekannte action' });
+}
+
+// Ein einziger Durchlauf über "Sales" liefert sowohl die Artikel-Summary
+// als auch die Zahlungsart-Summe (storno-bereinigt). Wird nur bei Bedarf
+// (Übersicht öffnen) aufgerufen, nicht bei jeder Buchung.
+function computeAggregates_(ss) {
+  const sh = ss.getSheetByName('Sales');
+  const data = sh.getDataRange().getValues();
+  const byProduct = {}; // name -> {qty, revenue}
+  const byPayment = {}; // method -> revenue
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row[0]) continue;
+    if (row[8]) continue; // storniert -> zählt nicht mit
+    const payment = row[2];
+    const productName = row[4];
+    const qty = Number(row[5]) || 0;
+    const lineTotal = Number(row[7]) || 0;
+
+    if (!byProduct[productName]) byProduct[productName] = { qty: 0, revenue: 0 };
+    byProduct[productName].qty += qty;
+    byProduct[productName].revenue += lineTotal;
+
+    byPayment[payment] = (byPayment[payment] || 0) + lineTotal;
+  }
+  return {
+    summary: Object.keys(byProduct).map(name => ({ name, qty: byProduct[name].qty, revenue: byProduct[name].revenue })),
+    payments: Object.keys(byPayment).map(method => ({ method, revenue: byPayment[method] }))
+  };
 }
 
 // Gruppiert die zeilenweisen Sales-Einträge nach sale_id zurück zu einer
@@ -117,8 +145,6 @@ function doPost(e) {
 
     if (body.type === 'sale') {
       const salesSh = ss.getSheetByName('Sales');
-      const summarySh = ss.getSheetByName('Summary');
-      const paymentsSh = ss.getSheetByName('Payments');
       const saleId = body.clientId;
       const payment = body.payment === 'ec' ? 'ec' : 'bar';
       const bookedBy = body.device || '';
@@ -136,8 +162,6 @@ function doPost(e) {
       body.items.forEach(item => {
         const lineTotal = item.qty * item.price;
         salesSh.appendRow([saleId, ts, payment, body.hut || '', item.name, item.qty, item.price, lineTotal, '', bookedBy, '', '']);
-        updateSummary(summarySh, item.name, item.qty, lineTotal);
-        updatePayments(paymentsSh, payment, lineTotal);
       });
 
       return jsonOut({ ok: true, id: saleId });
@@ -145,8 +169,6 @@ function doPost(e) {
 
     if (body.type === 'cancel_sale') {
       const salesSh = ss.getSheetByName('Sales');
-      const summarySh = ss.getSheetByName('Summary');
-      const paymentsSh = ss.getSheetByName('Payments');
       const saleId = body.clientId;
       const cancelledBy = body.device || '';
       const reason = (body.reason || '').toString().trim();
@@ -160,15 +182,9 @@ function doPost(e) {
         if (row[0] !== saleId) continue;
         if (row[8]) continue; // schon storniert, nichts doppelt zurückziehen
         found = true;
-        const payment = row[2];
-        const productName = row[4];
-        const qty = Number(row[5]) || 0;
-        const lineTotal = Number(row[7]) || 0;
         salesSh.getRange(i + 1, 9).setValue(true);        // Spalte 9 = storniert
         salesSh.getRange(i + 1, 11).setValue(cancelledBy); // Spalte 11 = storniert_von
         salesSh.getRange(i + 1, 12).setValue(reason);      // Spalte 12 = storno_grund
-        updateSummary(summarySh, productName, -qty, -lineTotal);
-        updatePayments(paymentsSh, payment, -lineTotal);
       }
       if (!found) return jsonOut({ error: 'Buchung nicht gefunden oder bereits storniert.' });
       return jsonOut({ ok: true, id: saleId, cancelled: true });
@@ -201,34 +217,11 @@ function doPost(e) {
   }
 }
 
-function updateSummary(sh, productName, qty, revenue) {
-  const data = sh.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === productName) {
-      sh.getRange(i + 1, 2).setValue(data[i][1] + qty);
-      sh.getRange(i + 1, 3).setValue(data[i][2] + revenue);
-      return;
-    }
-  }
-  sh.appendRow([productName, qty, revenue]);
-}
-
-function updatePayments(sh, method, revenue) {
-  const data = sh.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === method) {
-      sh.getRange(i + 1, 2).setValue(data[i][1] + revenue);
-      return;
-    }
-  }
-  sh.appendRow([method, revenue]);
-}
-
 // Einmalig manuell im Editor ausführen (Run-Dropdown) ODER über das Menü
 // "Kasse > Alle Buchungen zurücksetzen (neues Event)" im Sheet selbst.
-// Löscht ALLE Zeilen in Sales, Summary und Payments (Kopfzeilen bleiben).
-// Products (die Getränkekarte inkl. selbst hinzugefügter Getränke) bleibt
-// unangetastet — nur die Verkaufsdaten/Strichliste werden zurückgesetzt.
+// Löscht ALLE Zeilen in Sales (Summary/Payments werden nicht mehr befüllt,
+// bleiben zur Sicherheit aber im Reset enthalten falls noch alte Daten drin
+// stehen). Products (die Getränkekarte) bleibt unangetastet.
 function resetAllBookings() {
   ['Sales', 'Summary', 'Payments'].forEach(name => {
     const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
@@ -239,6 +232,35 @@ function resetAllBookings() {
     }
   });
   SpreadsheetApp.getUi().alert('Alle Buchungen wurden zurückgesetzt. Die Getränkekarte (Products) bleibt erhalten.');
+}
+
+// Einmalig manuell im Editor ausführen (Run-Dropdown -> diese Funktion
+// auswählen -> Run), wenn man die Tabellenblätter "Summary" und "Payments"
+// im Sheet selbst mal auf den aktuellen Stand bringen will (z.B. zum
+// Draufschauen/Exportieren). Für den laufenden Kassenbetrieb NICHT nötig,
+// die App liest ihre Zahlen live direkt aus "Sales" (siehe doGet oben).
+// Komplett getrennt von doPost/doGet, beeinflusst laufenden Betrieb nicht.
+function refreshSummaryPaymentsSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const agg = computeAggregates_(ss);
+
+  const summarySh = ss.getSheetByName('Summary');
+  if (summarySh) {
+    const lastRow = summarySh.getLastRow();
+    if (lastRow > 1) summarySh.getRange(2, 1, lastRow - 1, summarySh.getLastColumn()).clearContent();
+    const rows = agg.summary.map(r => [r.name, r.qty, r.revenue]);
+    if (rows.length) summarySh.getRange(2, 1, rows.length, 3).setValues(rows);
+  }
+
+  const paymentsSh = ss.getSheetByName('Payments');
+  if (paymentsSh) {
+    const lastRow = paymentsSh.getLastRow();
+    if (lastRow > 1) paymentsSh.getRange(2, 1, lastRow - 1, paymentsSh.getLastColumn()).clearContent();
+    const rows = agg.payments.map(r => [r.method, r.revenue]);
+    if (rows.length) paymentsSh.getRange(2, 1, rows.length, 2).setValues(rows);
+  }
+
+  SpreadsheetApp.getUi().alert('Summary & Payments wurden auf den aktuellen Stand gebracht.');
 }
 
 function jsonOut(obj) {
