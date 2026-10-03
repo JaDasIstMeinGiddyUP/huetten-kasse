@@ -91,7 +91,7 @@
   .mobile-cart-toggle{ display:none; }
   @media (max-width:760px){
     .shop-body{ flex-direction:column; position:relative; }
-    .grid-container{ flex:1; grid-template-columns:repeat(2, 1fr); padding:12px; padding-bottom:110px; gap:10px; }
+    .grid-container{ flex:1; grid-template-columns:repeat(2, 1fr); padding:12px; padding-bottom:calc(150px + env(safe-area-inset-bottom)); gap:10px; }
     .btn-product{ min-height:100px; padding:12px 8px; }
     .btn-product .emoji{ font-size:24px; margin-bottom:4px; }
     .btn-product .pname{ font-size:12px; }
