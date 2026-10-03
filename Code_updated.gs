@@ -5,21 +5,19 @@
  * (Erweiterungen → Apps Script) — ersetzt den kompletten bisherigen Inhalt.
  *
  * Erwartet VIER Tabellenblätter im Sheet:
- *   "Sales"    Kopfzeile: sale_id | timestamp | zahlungsart | huette | artikel | menge | einzelpreis | zeilensumme | storniert | gebucht_von | storniert_von
+ *   "Sales"    Kopfzeile: sale_id | timestamp | zahlungsart | huette | artikel | menge | einzelpreis | zeilensumme | storniert | gebucht_von | storniert_von | storno_grund
  *              -> jede Buchung wird zeilenweise pro Artikel eingetragen, gut lesbar, keine JSON-Klumpen
  *              -> Spalte 9 "storniert" (TRUE/leer) markiert stornierte Buchungen
- *              -> NEU: Spalte 10 "gebucht_von" = Gerätename/Person, die gebucht hat
- *              -> NEU: Spalte 11 "storniert_von" = Gerätename/Person, die storniert hat
+ *              -> Spalte 10 "gebucht_von" = Gerätename/Person, die gebucht hat
+ *              -> Spalte 11 "storniert_von" = Gerätename/Person, die storniert hat
+ *              -> NEU: Spalte 12 "storno_grund" = vom Personal eingegebene Begründung der Stornierung
  *   "Summary"  Kopfzeile: artikel | menge | umsatz
  *   "Payments" Kopfzeile: zahlungsart | umsatz
  *   "Products" Kopfzeile: id | category | name | price | emoji
  *
  * NEU in dieser Version:
- *   - action=recent (GET): letzte 30 Buchungen fürs Storno-Fenster in der App
- *   - type=cancel_sale (POST): storniert eine Buchung, zieht Summary/Payments zurück,
- *     protokolliert in Spalte 11, WER storniert hat (vom Gerätenamen aus der App)
- *   - jede Buchung trägt jetzt mit, WELCHES GERÄT/WER gebucht hat (Spalte 10)
- *   - resetAllBookings(): über Menü "Kasse > Alle Buchungen zurücksetzen" ausführbar
+ *   - type=cancel_sale verlangt jetzt "reason" und protokolliert ihn in Spalte 12
+ *   - action=recent liefert "cancelReason" mit zurück
  */
 
 function onOpen() {
@@ -91,13 +89,15 @@ function getRecentSales_(ss, limit) {
         total: 0,
         cancelled: !!row[8],
         bookedBy: row[9] || '',
-        cancelledBy: row[10] || ''
+        cancelledBy: row[10] || '',
+        cancelReason: row[11] || ''
       };
       order.push(saleId);
     }
     bySale[saleId].total += Number(row[7]) || 0;
     if (row[8]) bySale[saleId].cancelled = true;
     if (row[10]) bySale[saleId].cancelledBy = row[10];
+    if (row[11]) bySale[saleId].cancelReason = row[11];
   }
   const sales = order.map(id => bySale[id]).reverse();
   return sales.slice(0, limit || 30);
@@ -135,7 +135,7 @@ function doPost(e) {
       const ts = new Date(body.ts || Date.now());
       body.items.forEach(item => {
         const lineTotal = item.qty * item.price;
-        salesSh.appendRow([saleId, ts, payment, body.hut || '', item.name, item.qty, item.price, lineTotal, '', bookedBy, '']);
+        salesSh.appendRow([saleId, ts, payment, body.hut || '', item.name, item.qty, item.price, lineTotal, '', bookedBy, '', '']);
         updateSummary(summarySh, item.name, item.qty, lineTotal);
         updatePayments(paymentsSh, payment, lineTotal);
       });
@@ -149,6 +149,10 @@ function doPost(e) {
       const paymentsSh = ss.getSheetByName('Payments');
       const saleId = body.clientId;
       const cancelledBy = body.device || '';
+      const reason = (body.reason || '').toString().trim();
+      if (!reason) {
+        return jsonOut({ error: 'Begründung fehlt – Stornierung ohne Grund ist nicht erlaubt.' });
+      }
       const data = salesSh.getDataRange().getValues();
       let found = false;
       for (let i = 1; i < data.length; i++) {
@@ -160,8 +164,9 @@ function doPost(e) {
         const productName = row[4];
         const qty = Number(row[5]) || 0;
         const lineTotal = Number(row[7]) || 0;
-        salesSh.getRange(i + 1, 9).setValue(true);     // Spalte 9 = storniert
+        salesSh.getRange(i + 1, 9).setValue(true);        // Spalte 9 = storniert
         salesSh.getRange(i + 1, 11).setValue(cancelledBy); // Spalte 11 = storniert_von
+        salesSh.getRange(i + 1, 12).setValue(reason);      // Spalte 12 = storno_grund
         updateSummary(summarySh, productName, -qty, -lineTotal);
         updatePayments(paymentsSh, payment, -lineTotal);
       }

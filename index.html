@@ -392,6 +392,7 @@
       { name:'L\'Espérance Rosé',          price:34.00, emoji:'🌹', swatch:'rose' },
       { name:'La 50/50 Cuvée',             price:39.00, emoji:'🍇', swatch:'rose' },
       { name:'Herbias Flasche',            price:80.00, emoji:'🍾', swatch:'rose' },
+      { name:'Moët',                       price:69.00, emoji:'🍾', swatch:'rose' },
     ]
   };
   // Kategorien, in denen man per "+" selbst Getränke ergänzen kann
@@ -782,9 +783,11 @@
     if(list.innerHTML === '') list.innerHTML = '<div style="text-align:center; color:#c3bcae; padding:16px 0;">Keine offenen Buchungen.</div>';
   }
   async function cancelSale(clientId){
-    if(!confirm('Diese Buchung wirklich stornieren?')) return;
+    const reason = prompt('Grund für die Stornierung eingeben:');
+    if(reason === null) return; // abgebrochen
+    if(!reason.trim()){ alert('Bitte einen Grund angeben.'); return; }
     try{
-      await gasPost({ type:'cancel_sale', clientId, device: deviceName || 'unbekannt' });
+      await gasPost({ type:'cancel_sale', clientId, device: deviceName || 'unbekannt', reason: reason.trim() });
       recentSales = recentSales.map(s => s.clientId === clientId ? { ...s, cancelled:true } : s);
       renderCancelList();
       showToast('↩️ Buchung storniert');
