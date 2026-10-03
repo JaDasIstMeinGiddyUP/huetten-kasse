@@ -260,7 +260,7 @@ function refreshSummaryPaymentsSheets() {
     if (rows.length) paymentsSh.getRange(2, 1, rows.length, 2).setValues(rows);
   }
 
-  SpreadsheetApp.getUi().alert('Summary & Payments wurden auf den aktuellen Stand gebracht.');
+  Logger.log('Summary & Payments wurden auf den aktuellen Stand gebracht.');
 }
 
 function jsonOut(obj) {
