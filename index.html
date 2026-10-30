@@ -232,8 +232,8 @@
     <div class="hut-grid">
       <div class="hut-card bier" onclick="openShop('bier')">
         <div class="hut-icon">🍺</div>
-        <h2>Bier-Hütte</h2>
-        <p>Fassbier, Flaschenbier &amp; Softdrinks</p>
+        <h2>Zeltbar</h2>
+        <p>Bier, Softdrinks &amp; Wasser</p>
         <div class="tap-hint">Antippen zum Öffnen</div>
       </div>
       <div class="hut-card wein" onclick="openShop('wein')">
@@ -243,9 +243,9 @@
         <div class="tap-hint">Antippen zum Öffnen</div>
       </div>
       <div class="hut-card cocktail" onclick="openShop('cocktail')">
-        <div class="hut-icon">🍸</div>
-        <h2>Cocktail-Hütte</h2>
-        <p>Cocktails, Long Island &amp; Glühwein</p>
+        <div class="hut-icon">🧇</div>
+        <h2>Waffel &amp; Glühwein</h2>
+        <p>Waffeln mit Nutella/Sahne &amp; Glühwein</p>
         <div class="tap-hint">Antippen zum Öffnen</div>
       </div>
     </div>
@@ -256,14 +256,14 @@
     <div class="topbar">
       <div class="topbar-left">
         <button class="back-btn" onclick="goBack()">⌂</button>
-        <div class="shop-title" id="shopTitle">Bier-Hütte</div>
+        <div class="shop-title" id="shopTitle">Zeltbar</div>
       </div>
       <div class="topbar-right">
         <div class="sync-badge ok" id="syncBadge" ondblclick="changeDeviceName()" title="Doppeltipp: Gerätename ändern"><span class="dot"></span><span id="syncText">Verbunden</span></div>
         <div class="hut-switch">
-          <button id="switchBier" class="bier" onclick="switchHut('bier')">🍺 Bier</button>
+          <button id="switchBier" class="bier" onclick="switchHut('bier')">🍺 Zeltbar</button>
           <button id="switchWein" class="wein" onclick="switchHut('wein')">🍷 Wein</button>
-          <button id="switchCocktail" class="cocktail" onclick="switchHut('cocktail')">🍸 Cocktail</button>
+          <button id="switchCocktail" class="cocktail" onclick="switchHut('cocktail')">🧇 Waffel</button>
         </div>
       </div>
     </div>
@@ -347,36 +347,41 @@
   // ==================================================================
   const PRODUCTS = {
     bier: [
-      { name:'Augustiner Hell 0,5l', price:6.00,  emoji:'🍺', swatch:'amber' },
-      { name:'Augustiner Hell 1,0l', price:12.00, emoji:'🍺', swatch:'amber' },
-      { name:'Augustiner Weizen',    price:6.00,  emoji:'🍺', swatch:'amber' },
-      { name:'Weizen 0,0',           price:5.90,  emoji:'🍺', swatch:'amber' },
-      { name:'Schumacher Alt',       price:4.50,  emoji:'🍺', swatch:'amber' },
-      { name:'Naturradler',          price:4.50,  emoji:'🍺', swatch:'amber' },
-      { name:'Naturradler 0,0',      price:4.50,  emoji:'🍺', swatch:'amber' },
-      { name:'Coca Cola',            price:4.00,  emoji:'🥤', swatch:'sky'   },
-      { name:'Coca Cola Zero',       price:4.00,  emoji:'🥤', swatch:'sky'   },
-      { name:'Wasser',               price:3.90,  emoji:'💧', swatch:'mint'  },
+      { name:'Coca Cola',               price:4.00,  emoji:'🥤', swatch:'sky'   },
+      { name:'Coca Cola Zero',          price:4.00,  emoji:'🥤', swatch:'sky'   },
+      { name:'Wasser still',            price:3.90,  emoji:'💧', swatch:'mint'  },
+      { name:'Wasser sprudel',          price:3.90,  emoji:'💧', swatch:'mint'  },
+      { name:'Naturradler',             price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Naturradler 0,0',         price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Augustiner Weizen',       price:6.00,  emoji:'🍺', swatch:'amber' },
+      { name:'Augustiner Helles',       price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Augustiner Helles 0,0',   price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Paulaner Weizen 0,0',     price:5.90,  emoji:'🍺', swatch:'amber' },
+      { name:'Estrella',                price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Estrella 0,0',            price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Salitos',                 price:4.50,  emoji:'🍺', swatch:'amber' },
+      { name:'Schumacher Alt',          price:4.50,  emoji:'🍺', swatch:'amber' },
     ],
     wein: [
       { name:'Rosé (Glas)',          price:6.00,  emoji:'🍷', swatch:'rose'  },
       { name:'Grauburgunder (Glas)', price:6.00,  emoji:'🍷', swatch:'rose'  },
+      { name:'Rotwein (Glas)',       price:6.00,  emoji:'🍷', swatch:'rose'  },
       { name:'Weinschorle',          price:6.00,  emoji:'🥂', swatch:'rose'  },
       { name:'Glücklich Spritz',     price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol Spritz',        price:8.90,  emoji:'🍹', swatch:'peach' },
       { name:'Aperol 0,0%',          price:7.50,  emoji:'🍹', swatch:'peach' },
-      { name:'Erdbeer Secco',        price:8.90,  emoji:'🍓', swatch:'peach' },
+      { name:'Mango Spritz',         price:8.90,  emoji:'🥭', swatch:'peach' },
+      { name:'Berry Spritz',         price:8.90,  emoji:'🍓', swatch:'peach' },
       { name:'Erdbeer Secco 0,0%',   price:7.50,  emoji:'🍓', swatch:'peach' },
       { name:'Herbias Shot',         price:5.00,  emoji:'🥃', swatch:'amber' },
-      { name:'Estrella 0,33L',       price:4.50,  emoji:'🍺', swatch:'amber' },
       { name:'Wasser 0,75L',         price:6.90,  emoji:'💧', swatch:'mint'  },
       { name:'Wasser 0,33L',         price:3.90,  emoji:'💧', swatch:'mint'  },
-      { name:'Glühwein',             price:5.00,  emoji:'🍷', swatch:'rose'  },
     ],
     cocktail: [
-      { name:'Cocktails',            price:9.90,  emoji:'🍸', swatch:'sky'   },
-      { name:'Alkoholfreie Cocktails', price:8.90, emoji:'🍹', swatch:'mint' },
-      { name:'Long Island Ice Tea',  price:10.90, emoji:'🧉', swatch:'amber' },
+      { name:'Waffel',               price:5.00,  emoji:'🧇', swatch:'amber' },
+      { name:'+ Nutella',            price:1.00,  emoji:'🍫', swatch:'amber' },
+      { name:'+ Sahne',              price:1.00,  emoji:'🍦', swatch:'amber' },
+      { name:'Glühwein',             price:5.00,  emoji:'🍷', swatch:'rose'  },
     ]
   };
   const BOTTLES = {
@@ -393,14 +398,16 @@
       { name:'La 50/50 Cuvée',             price:39.00, emoji:'🍇', swatch:'rose' },
       { name:'Herbias Flasche',            price:80.00, emoji:'🍾', swatch:'rose' },
       { name:'Moët',                       price:69.00, emoji:'🍾', swatch:'rose' },
+      { name:'Rotwein Primitivo (Apulien)',price:25.00, emoji:'🍷', swatch:'rose' },
+      { name:'Sekt La Gioiosa',            price:25.00, emoji:'🥂', swatch:'rose' },
     ]
   };
   // Kategorien, in denen man per "+" selbst Getränke ergänzen kann
   const CATEGORY_META = {
-    'bier':          { swatch:'amber', defaultEmoji:'🍺', label:'Bier-Hütte' },
+    'bier':          { swatch:'amber', defaultEmoji:'🍺', label:'Zeltbar' },
     'wein':          { swatch:'peach', defaultEmoji:'🥤', label:'Wein-Hütte' },
     'wein-flaschen': { swatch:'rose',  defaultEmoji:'🍷', label:'Weinkarte (Flasche)' },
-    'cocktail':      { swatch:'sky',   defaultEmoji:'🍸', label:'Cocktail-Hütte' },
+    'cocktail':      { swatch:'sky',   defaultEmoji:'🍸', label:'Waffel & Glühwein' },
   };
 
   // ==================================================================
