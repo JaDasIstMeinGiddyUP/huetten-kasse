@@ -445,14 +445,20 @@
   // ==================================================================
   // BACKEND-KOMMUNIKATION (Google Apps Script)
   // ==================================================================
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  // fetch mit Zeitlimit: haengt eine Verbindung im Zelt, bricht sie nach 25 s ab und der Retry greift
+  async function fetchT(url, opts, ms){
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms || 25000);
+    try{ return await fetch(url, Object.assign({}, opts, { signal: ctl.signal })); } finally { clearTimeout(t); }
+  }
   async function gasGet(action){
-    const res = await fetch(GAS_URL + '?action=' + action, { method:'GET' });
+    const res = await fetchT(GAS_URL + '?action=' + action, { method:'GET' });
     if(!res.ok) throw new Error('HTTP ' + res.status);
     return await res.json();
   }
   async function gasPost(payload){
     // Content-Type text/plain vermeidet einen CORS-Preflight, den Apps Script nicht beantwortet
-    const res = await fetch(GAS_URL, {
+    const res = await fetchT(GAS_URL, {
       method:'POST',
       headers: { 'Content-Type':'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
@@ -523,6 +529,8 @@
     document.getElementById('loadingOverlay').style.display = 'none';
     renderCart();
     syncTimer = setInterval(() => { if(!queueRunning) loadCustomProducts(); }, 20000);
+    restoreQueue();
+    setInterval(() => { if(!queueRunning && saleQueue.length === 0 && pendingFailedSales.length) retryAllFailed(); }, 30000);
   }
 
   function setSyncBadge(state){
@@ -599,8 +607,8 @@
     tile.className = 'btn-product swatch-' + p.swatch + (isCustom ? ' custom-tile' : '');
     tile.onclick = () => { addItem(p.name, p.price); flashTile(tile, p.name); };
     tile.innerHTML = `
-      <div class="emoji">${p.emoji || '🍷'}</div>
-      <div class="pname">${p.name}</div>
+      <div class="emoji">${esc(p.emoji || '🍷')}</div>
+      <div class="pname">${esc(p.name)}</div>
       <div class="price-tag">${p.price.toFixed(2).replace('.', ',')} €</div>
       ${isCustom ? '<button class="del-btn" onclick="event.stopPropagation(); removeCustomProduct(\''+customId+'\')">×</button>' : ''}
     `;
@@ -631,7 +639,7 @@
     const name = document.getElementById('newProdName').value.trim();
     const price = parseFloat(document.getElementById('newProdPrice').value.replace(',', '.'));
     const emoji = document.getElementById('newProdEmoji').value.trim() || CATEGORY_META[currentAddCategory].defaultEmoji;
-    if(!name || isNaN(price) || price <= 0){ alert('Bitte einen Namen und einen gültigen Preis eingeben.'); return; }
+    if(!name || name.length > 40 || isNaN(price) || price <= 0 || price > 1000){ alert('Bitte einen Namen (max. 40 Zeichen) und einen gültigen Preis eingeben.'); return; }
     try{
       const res = await gasPost({ type:'product', category: currentAddCategory, name, price, emoji });
       customProducts[currentAddCategory][res.id] = { name, price, emoji };
@@ -649,15 +657,20 @@
     }catch(e){ alert('Löschen fehlgeschlagen – bitte nochmal versuchen.'); }
   }
 
+  let lastProductsSig = '';
   async function loadCustomProducts(){
     try{
-      setSyncBadge('syncing');
       const rows = await gasGet('products');
-      const fresh = { bier:{}, wein:{}, 'wein-flaschen':{} };
-      rows.forEach(r => { if(fresh[r.category]){ fresh[r.category][r.id] = { name:r.name, price:parseFloat(r.price), emoji:r.emoji }; } });
-      customProducts = fresh;
-      setSyncBadge('ok');
-      renderShop();
+      const fresh = { bier:{}, wein:{}, 'wein-flaschen':{}, cocktail:{} };
+      (rows || []).forEach(r => { if(fresh[r.category]){ fresh[r.category][r.id] = { name:String(r.name || ''), price:parseFloat(r.price) || 0, emoji:r.emoji }; } });
+      if(!queueRunning) setSyncBadge('ok');
+      const sig = JSON.stringify(fresh);
+      if(sig !== lastProductsSig){
+        lastProductsSig = sig; customProducts = fresh;
+        const g = document.getElementById('grid'); const st = g ? g.scrollTop : 0;
+        renderShop();
+        if(g) g.scrollTop = st;
+      }
     }catch(e){ setSyncBadge('offline'); }
   }
 
@@ -666,21 +679,22 @@
   // ==================================================================
   function addItem(name, price){ if(cart[name]){ cart[name].count++; } else { cart[name] = { price, count:1 }; } renderCart(); }
   function changeQty(name, delta){ if(!cart[name]) return; cart[name].count += delta; if(cart[name].count <= 0) delete cart[name]; renderCart(); }
+  function changeQtyAt(i, delta){ const k = Object.keys(cart)[i]; if(k !== undefined) changeQty(k, delta); }
   function renderCart(){
     const cartDiv = document.getElementById('cart');
     cartDiv.innerHTML = ''; totalSum = 0;
     const items = Object.keys(cart);
     if(items.length === 0){ cartDiv.innerHTML = '<div class="empty-cart">Noch nichts im Bon.</div>'; }
-    items.forEach(item => {
+    items.forEach((item, idx) => {
       const itemTotal = cart[item].price * cart[item].count;
       totalSum += itemTotal;
       cartDiv.innerHTML += `
         <div class="cart-item">
-          <span>${item}</span>
+          <span>${esc(item)}</span>
           <div class="qty-controls">
-            <button onclick="changeQty('${item}', -1)">−</button>
+            <button onclick="changeQtyAt(${idx}, -1)">−</button>
             <span>${cart[item].count}</span>
-            <button onclick="changeQty('${item}', 1)">+</button>
+            <button onclick="changeQtyAt(${idx}, 1)">+</button>
             <span style="margin-left:4px;">${itemTotal.toFixed(2).replace('.', ',')} €</span>
           </div>
         </div>`;
@@ -746,13 +760,25 @@
   }
   // Warteschlange: immer nur eine Buchung gleichzeitig an Google senden (haelt die Reihenfolge, kein Stau im Backend)
   let saleQueue = []; let queueRunning = false;
-  function enqueueSale(clientId, sale){ saleQueue.push({ clientId, sale }); updateQueueBadge(); runQueue(); }
+  const QKEY = 'kasse_queue_v1';
+  function persistQueue(){ try{ localStorage.setItem(QKEY, JSON.stringify({ q: saleQueue, f: pendingFailedSales })); }catch(e){} }
+  function restoreQueue(){
+    try{
+      const d = JSON.parse(localStorage.getItem(QKEY) || 'null'); if(!d) return;
+      [].concat(d.q || [], d.f || []).forEach(it => { if(it && it.clientId && it.sale) enqueueSale(it.clientId, it.sale); });
+    }catch(e){}
+  }
+  function enqueueSale(clientId, sale){
+    if(saleQueue.some(x => x.clientId === clientId)) return;
+    if(!sale.device) sale.device = deviceName || 'unbekannt';
+    saleQueue.push({ clientId, sale }); persistQueue(); updateQueueBadge(); runQueue();
+  }
   async function runQueue(){
     if(queueRunning) return; queueRunning = true;
     while(saleQueue.length){
       const item = saleQueue[0];
       await attemptSaveSale(item.clientId, item.sale, 0);
-      saleQueue.shift(); updateQueueBadge();
+      saleQueue.shift(); persistQueue(); updateQueueBadge();
     }
     queueRunning = false;
   }
@@ -763,10 +789,10 @@
   }
   async function attemptSaveSale(clientId, sale, attempt){
     try{
-      await gasPost({ type:'sale', clientId, hut: sale.hut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts, device: deviceName || 'unbekannt' });
+      await gasPost({ type:'sale', clientId, hut: sale.hut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts, device: sale.device || deviceName || 'unbekannt' });
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
       recentSales.unshift({ clientId, total: sale.total, payment: sale.payment, hut: sale.hut, ts: sale.ts, cancelled: false });
-      renderFailBanner();
+      persistQueue(); renderFailBanner();
       if(saleQueue.length <= 1) setSyncBadge('ok');
     }catch(e){
       if(attempt < RETRY_DELAYS.length){
@@ -776,7 +802,7 @@
       }else{
         setSyncBadge('offline');
         if(!pendingFailedSales.find(p => p.clientId === clientId)) pendingFailedSales.push({ clientId, sale });
-        renderFailBanner(); // Buchung bleibt erhalten, nichts wird verworfen
+        persistQueue(); renderFailBanner(); // Buchung bleibt erhalten, nichts wird verworfen
       }
     }
   }
@@ -791,7 +817,7 @@
     const el = document.getElementById('failBanner');
     if(pendingFailedSales.length === 0){ el.innerHTML = ''; return; }
     const sum = pendingFailedSales.reduce((s,p) => s + p.sale.total, 0);
-    el.innerHTML = `<div class="banner-fail"><span>⚠️ ${pendingFailedSales.length} Buchung(en) noch nicht gespeichert (${sum.toFixed(2).replace('.', ',')} €) – Bon bleibt erhalten.</span><button onclick="retryAllFailed()">Erneut senden</button></div>`;
+    el.innerHTML = `<div class="banner-fail"><span>⚠️ ${pendingFailedSales.length} Buchung(en) noch nicht gespeichert (${sum.toFixed(2).replace('.', ',')} €) – bleibt gespeichert und wird automatisch erneut gesendet.</span><button onclick="retryAllFailed()">Erneut senden</button></div>`;
   }
   function showToast(msg){ const t = document.getElementById('toastSuccess'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
 
@@ -824,7 +850,7 @@
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:12px; cursor:pointer;';
       const time = sale.ts ? new Date(Number(sale.ts)).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) : '';
-      row.innerHTML = `<div><div style="font-weight:700; font-size:13.5px;">${(sale.total||0).toFixed ? sale.total.toFixed(2).replace('.', ',') : sale.total} €</div><div style="font-size:11.5px; color:var(--sub);">${time} · ${sale.hut || ''} · ${sale.payment === 'ec' ? 'EC' : 'BAR'}</div></div><span style="color:var(--red-clear); font-weight:700; font-size:12px;">Stornieren</span>`;
+      row.innerHTML = `<div><div style="font-weight:700; font-size:13.5px;">${(sale.total||0).toFixed ? sale.total.toFixed(2).replace('.', ',') : sale.total} €</div><div style="font-size:11.5px; color:var(--sub);">${time} · ${esc(sale.hut || '')} · ${sale.payment === 'ec' ? 'EC' : 'BAR'}</div></div><span style="color:var(--red-clear); font-weight:700; font-size:12px;">Stornieren</span>`;
       row.onclick = () => cancelSale(sale.clientId);
       list.appendChild(row);
     });
