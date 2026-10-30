@@ -107,6 +107,7 @@
     .shop-body{ flex-direction:column; position:relative; }
     .grid-container{ flex:1; grid-template-columns:repeat(2, 1fr); padding:12px; padding-bottom:calc(150px + env(safe-area-inset-bottom)); gap:10px; }
     .btn-product{ min-height:100px; padding:12px 8px; }
+    .back-bar{ bottom:calc(86px + env(safe-area-inset-bottom)); }
     .btn-product .emoji{ font-size:24px; margin-bottom:4px; }
     .btn-product .pname{ font-size:12px; }
     .btn-product .price-tag{ font-size:11.5px; margin-top:4px; }
@@ -143,6 +144,8 @@
   .swatch-sky{   background:var(--sky-bg);   } .swatch-sky .price-tag{ color:var(--sky-ac);}
   .swatch-mint{  background:var(--mint-bg);  } .swatch-mint .price-tag{ color:var(--mint-ac);}
   .bottle-tile{ border:2px dashed var(--rose-ac); }
+  .back-bar{ grid-column:1 / -1; position:sticky; bottom:10px; z-index:5; border:none; border-radius:18px; padding:16px; font-family:'Poppins',sans-serif; font-size:16px; font-weight:700; cursor:pointer; background:var(--rose-ac); color:#fff; box-shadow:0 8px 20px rgba(0,0,0,.18); }
+  .back-bar:active{ transform:scale(.98); filter:brightness(.92); }
   .bottle-tile .price-tag{ color:var(--rose-ac); font-weight:600; }
   .add-tile{ border:2px dashed #c9c2b3; background:#faf9f6; color:#8a8378; }
   .add-tile .pname{ color:#8a8378; }
@@ -570,6 +573,11 @@
       BOTTLES.wein.forEach(p => grid.appendChild(makeTile(p)));
       renderCustomTiles(grid, 'wein-flaschen');
       grid.appendChild(makeAddTile('wein-flaschen'));
+      const back = document.createElement('button');
+      back.className = 'back-bar'; back.type = 'button';
+      back.textContent = '← Zurück zur Wein-Hütte';
+      back.onclick = goBack;
+      grid.appendChild(back);
       return;
     }
 
