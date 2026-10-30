@@ -32,9 +32,10 @@
   .fatal-overlay p{ color:var(--sub); font-size:14px; max-width:360px; line-height:1.5; }
   .fatal-overlay code{ background:#f4f1ec; padding:2px 6px; border-radius:6px; font-size:12.5px; }
 
-  #home{ flex-direction:column; align-items:center; justify-content:center; width:100%; gap:36px; padding:24px;
+  #home{ overflow-y:auto; -webkit-overflow-scrolling:touch; height:100dvh; flex-direction:column; align-items:center; justify-content:flex-start; width:100%; gap:36px; padding:24px;
     background:radial-gradient(circle at 12% 10%, #fdf2e3 0%, rgba(253,242,227,0) 40%),
                radial-gradient(circle at 90% 88%, #fbe4ec55 0%, rgba(251,228,236,0) 45%), var(--bg); }
+  #home > :first-child{ margin-top:auto; } #home > :last-child{ margin-bottom:auto; padding-bottom:24px; }
   .home-header{ text-align:center; }
   .home-header .brandmark{ justify-content:center; margin-bottom:10px; }
   .home-header h1{ font-family:'Dancing Script',cursive; font-weight:700; font-size:54px; line-height:1; }
