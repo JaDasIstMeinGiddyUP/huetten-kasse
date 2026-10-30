@@ -131,6 +131,11 @@ function getRecentSales_(ss, limit) {
   return sales.slice(0, limit || 30);
 }
 
+// Interne Hütten-Kürzel aus der App -> lesbarer Name im Sheet (Halloween-Karte).
+const HUT_LABELS_ = { bier: 'Zeltbar', wein: 'Wein-Hütte', cocktail: 'Waffel & Glühwein' };
+function hutLabel_(k) { return HUT_LABELS_[k] || k || 'Unbekannte Hütte'; }
+function itemName_(n) { n = (n || '').toString().trim(); return n || 'Unbenannter Artikel'; }
+
 function doPost(e) {
   // LockService verhindert, dass zwei gleichzeitige Buchungen sich gegenseitig überschreiben
   const lock = LockService.getScriptLock();
@@ -161,7 +166,7 @@ function doPost(e) {
       const ts = new Date(body.ts || Date.now());
       body.items.forEach(item => {
         const lineTotal = item.qty * item.price;
-        salesSh.appendRow([saleId, ts, payment, body.hut || '', item.name, item.qty, item.price, lineTotal, '', bookedBy, '', '']);
+        salesSh.appendRow([saleId, ts, payment, hutLabel_(body.hut), itemName_(item.name), item.qty, item.price, lineTotal, '', bookedBy, '', '']);
       });
 
       return jsonOut({ ok: true, id: saleId });
