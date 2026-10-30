@@ -134,7 +134,18 @@ function getRecentSales_(ss, limit) {
 // Interne Hütten-Kürzel aus der App -> lesbarer Name im Sheet (Halloween-Karte).
 const HUT_LABELS_ = { bier: 'Zeltbar', wein: 'Wein-Hütte', cocktail: 'Waffel & Glühwein' };
 function hutLabel_(k) { return HUT_LABELS_[k] || k || 'Unbekannte Hütte'; }
-function itemName_(n) { n = (n || '').toString().trim(); return n || 'Unbenannter Artikel'; }
+function itemName_(n) {
+  n = (n || '').toString().trim().slice(0, 60);
+  if (!n) return 'Unbenannter Artikel';
+  // Schutz vor Formel-Einschleusung: Namen, die mit = + - @ beginnen, als Text speichern
+  if (/^[=+\-@]/.test(n)) n = "'" + n;
+  return n;
+}
+// Mengen/Preise serverseitig pruefen, damit kaputte oder manipulierte Anfragen keine Fantasiezahlen ins Sheet schreiben
+function cleanNum_(v, min, max) {
+  const x = Number(String(v).replace(',', '.'));
+  return (isFinite(x) && x >= min && x <= max) ? x : null;
+}
 
 function doPost(e) {
   // LockService verhindert, dass zwei gleichzeitige Buchungen sich gegenseitig überschreiben
@@ -152,19 +163,33 @@ function doPost(e) {
       const salesSh = ss.getSheetByName('Sales');
       const saleId = body.clientId;
       const payment = body.payment === 'ec' ? 'ec' : 'bar';
-      const bookedBy = body.device || '';
+      const bookedBy = (body.device || '').toString().slice(0, 40);
 
       // Idempotenz: Falls diese Buchung (gleiche clientId) bei einem Retry schon
       // erfolgreich gespeichert wurde, NICHT nochmal eintragen/zählen.
-      const existing = salesSh.getDataRange().getValues();
-      for (let i = 1; i < existing.length; i++) {
-        if (existing[i][0] === saleId) {
-          return jsonOut({ ok: true, id: saleId, duplicate: true });
+      if (!saleId || !Array.isArray(body.items) || body.items.length === 0 || body.items.length > 80) {
+        return jsonOut({ error: 'ungueltige Buchung' });
+      }
+      // nur die letzten 400 IDs pruefen (Retries kommen immer kurz nach dem Original) - bleibt schnell, auch bei vielen Buchungen
+      const lastRow = salesSh.getLastRow();
+      if (lastRow > 1) {
+        const from = Math.max(2, lastRow - 399);
+        const ids = salesSh.getRange(from, 1, lastRow - from + 1, 1).getValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (ids[i][0] === saleId) return jsonOut({ ok: true, id: saleId, duplicate: true });
         }
+      }
+      const clean = [];
+      for (let k = 0; k < body.items.length; k++) {
+        const it = body.items[k] || {};
+        const qty = cleanNum_(it.qty, 1, 999);
+        const price = cleanNum_(it.price, 0, 1000);
+        if (qty === null || price === null || Math.floor(qty) !== qty) return jsonOut({ error: 'ungueltige Menge oder Preis' });
+        clean.push({ name: it.name, qty: qty, price: price });
       }
 
       const ts = new Date(body.ts || Date.now());
-      body.items.forEach(item => {
+      clean.forEach(item => {
         const lineTotal = item.qty * item.price;
         salesSh.appendRow([saleId, ts, payment, hutLabel_(body.hut), itemName_(item.name), item.qty, item.price, lineTotal, '', bookedBy, '', '']);
       });
@@ -175,8 +200,8 @@ function doPost(e) {
     if (body.type === 'cancel_sale') {
       const salesSh = ss.getSheetByName('Sales');
       const saleId = body.clientId;
-      const cancelledBy = body.device || '';
-      const reason = (body.reason || '').toString().trim();
+      const cancelledBy = (body.device || '').toString().slice(0, 40);
+      const reason = (body.reason || '').toString().trim().slice(0, 200);
       if (!reason) {
         return jsonOut({ error: 'Begründung fehlt – Stornierung ohne Grund ist nicht erlaubt.' });
       }
@@ -198,7 +223,10 @@ function doPost(e) {
     if (body.type === 'product') {
       const sh = ss.getSheetByName('Products');
       const id = Utilities.getUuid();
-      sh.appendRow([id, body.category, body.name, body.price, body.emoji || '']);
+      const pname = (body.name || '').toString().trim().slice(0, 40);
+      const pprice = cleanNum_(body.price, 0.01, 1000);
+      if (!pname || pprice === null || ['bier', 'wein', 'wein-flaschen', 'cocktail'].indexOf(body.category) < 0) return jsonOut({ error: 'ungueltiger Artikel' });
+      sh.appendRow([id, body.category, itemName_(pname), pprice, (body.emoji || '').toString().slice(0, 8)]);
       return jsonOut({ ok: true, id: id });
     }
 
