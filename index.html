@@ -509,7 +509,7 @@
     catch(e){ /* Erst-Sync kann fehlschlagen, Polling versucht es weiter */ }
     document.getElementById('loadingOverlay').style.display = 'none';
     renderCart();
-    syncTimer = setInterval(() => { loadCustomProducts(); }, 8000);
+    syncTimer = setInterval(() => { if(!queueRunning) loadCustomProducts(); }, 20000);
   }
 
   function setSyncBadge(state){
@@ -715,32 +715,51 @@
   function confirmCheckout(method){
     closePaymentModal();
     const saleItems = Object.keys(cart).map(name => ({ name, price: cart[name].price, qty: cart[name].count }));
-    const sale = { items: saleItems, total: totalSum, ts: Date.now(), payment: method };
+    const sale = { items: saleItems, total: totalSum, ts: Date.now(), payment: method, hut: currentHut };
     const clientId = 'sale-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
-    setCheckoutButtonState('saving');
-    attemptSaveSale(clientId, sale, 0);
+    // Sofort weiter: Bon leeren, Bestaetigung zeigen. Speichern laeuft im Hintergrund.
+    clearCart();
+    if(currentSub){ currentSub = null; renderShop(); }
+    showToast('✅ Gebucht (' + (method === 'ec' ? 'EC' : 'BAR') + ') – wird gesendet');
+    enqueueSale(clientId, sale);
+  }
+  // Warteschlange: immer nur eine Buchung gleichzeitig an Google senden (haelt die Reihenfolge, kein Stau im Backend)
+  let saleQueue = []; let queueRunning = false;
+  function enqueueSale(clientId, sale){ saleQueue.push({ clientId, sale }); updateQueueBadge(); runQueue(); }
+  async function runQueue(){
+    if(queueRunning) return; queueRunning = true;
+    while(saleQueue.length){
+      const item = saleQueue[0];
+      await attemptSaveSale(item.clientId, item.sale, 0);
+      saleQueue.shift(); updateQueueBadge();
+    }
+    queueRunning = false;
+  }
+  window.addEventListener('beforeunload', e => { if(saleQueue.length || pendingFailedSales.length){ e.preventDefault(); e.returnValue = ''; } });
+  function updateQueueBadge(){
+    const n = saleQueue.length;
+    if(n > 0){ setSyncBadge('syncing'); document.getElementById('syncText').textContent = 'Sende ' + n + ' …'; }
   }
   async function attemptSaveSale(clientId, sale, attempt){
     try{
-      setSyncBadge('syncing');
-      await gasPost({ type:'sale', clientId, hut: currentHut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts, device: deviceName || 'unbekannt' });
+      await gasPost({ type:'sale', clientId, hut: sale.hut, payment: sale.payment, items: sale.items, total: sale.total, ts: sale.ts, device: deviceName || 'unbekannt' });
       pendingFailedSales = pendingFailedSales.filter(p => p.clientId !== clientId);
-      recentSales.unshift({ clientId, total: sale.total, payment: sale.payment, hut: currentHut, ts: sale.ts, cancelled: false });
-      renderFailBanner(); setSyncBadge('ok'); setCheckoutButtonState('idle');
-      showToast('✅ Buchung gespeichert (' + (sale.payment === 'ec' ? 'EC' : 'BAR') + ')'); clearCart();
-      if(currentSub){ currentSub = null; renderShop(); } // nach Buchung zurück zur Hütten-Hauptseite
+      recentSales.unshift({ clientId, total: sale.total, payment: sale.payment, hut: sale.hut, ts: sale.ts, cancelled: false });
+      renderFailBanner();
+      if(saleQueue.length <= 1) setSyncBadge('ok');
     }catch(e){
       if(attempt < RETRY_DELAYS.length){
-        setSyncBadge('offline'); setCheckoutButtonState('retrying', attempt + 1);
-        setTimeout(() => attemptSaveSale(clientId, sale, attempt + 1), RETRY_DELAYS[attempt]);
+        setSyncBadge('offline');
+        await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+        return attemptSaveSale(clientId, sale, attempt + 1);
       }else{
-        setSyncBadge('offline'); setCheckoutButtonState('idle');
+        setSyncBadge('offline');
         if(!pendingFailedSales.find(p => p.clientId === clientId)) pendingFailedSales.push({ clientId, sale });
-        renderFailBanner(); // Bon bleibt erhalten, nichts wird verworfen
+        renderFailBanner(); // Buchung bleibt erhalten, nichts wird verworfen
       }
     }
   }
-  function retryAllFailed(){ [...pendingFailedSales].forEach(item => attemptSaveSale(item.clientId, item.sale, 0)); }
+  function retryAllFailed(){ [...pendingFailedSales].forEach(item => enqueueSale(item.clientId, item.sale)); }
   function setCheckoutButtonState(state, attempt){
     const btn = document.getElementById('checkoutBtn');
     if(state === 'saving'){ btn.disabled = true; btn.textContent = 'Wird gespeichert …'; }
