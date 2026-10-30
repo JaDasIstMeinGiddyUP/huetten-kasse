@@ -444,6 +444,12 @@
 
   const RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000];
   const PIN_CODE = '2015';
+  const PIN_KEY = 'kasse_unlocked_at';
+  const PIN_TTL = 14 * 60 * 60 * 1000; // 14 Stunden
+  function pinStillValid(){
+    const t = parseInt(localStorage.getItem(PIN_KEY) || '0', 10);
+    return t > 0 && Date.now() - t < PIN_TTL && Date.now() >= t;
+  }
 
   // ==================================================================
   // BACKEND-KOMMUNIKATION (Google Apps Script)
@@ -478,6 +484,7 @@
   function checkPin(){
     const val = document.getElementById('pinInput').value;
     if(val === PIN_CODE){
+      try{ localStorage.setItem(PIN_KEY, String(Date.now())); }catch(e){}
       document.getElementById('pinModal').classList.remove('show');
       document.getElementById('pinInput').value = '';
       document.getElementById('pinError').textContent = '';
@@ -520,8 +527,11 @@
   // INIT
   // ==================================================================
   async function init(){
-    document.getElementById('pinModal').classList.add('show');
-    document.getElementById('pinInput').focus();
+    if(pinStillValid()){ ensureDeviceName(); }
+    else{
+      document.getElementById('pinModal').classList.add('show');
+      document.getElementById('pinInput').focus();
+    }
     if(!GAS_URL || GAS_URL.indexOf('PASTE_YOUR') === 0){
       document.getElementById('loadingOverlay').style.display = 'none';
       document.getElementById('fatalOverlay').style.display = 'flex';
@@ -533,6 +543,13 @@
     renderCart();
     syncTimer = setInterval(() => { if(!queueRunning) loadCustomProducts(); }, 20000);
     restoreQueue();
+    // nach Ablauf der 14 h wieder sperren (Bon und Warteschlange bleiben erhalten)
+    setInterval(() => {
+      if(!pinStillValid() && !document.getElementById('pinModal').classList.contains('show')){
+        document.getElementById('pinModal').classList.add('show');
+        document.getElementById('pinInput').focus();
+      }
+    }, 60000);
     setInterval(() => { if(!queueRunning && saleQueue.length === 0 && pendingFailedSales.length) retryAllFailed(); }, 30000);
   }
 
